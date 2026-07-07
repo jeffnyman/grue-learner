@@ -96,6 +96,11 @@ interface DecodedConventionalFlag {
   source: string;
 }
 
+interface ConventionalIdentifiers {
+  releaseNumber: number; // offset 0x02, word
+  serialCode: string; // offset 0x12, 6 bytes ASCII
+}
+
 const KNOWN_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export function readVersion(storyData: Uint8Array): number {
@@ -239,6 +244,13 @@ export function decodeFlags2(flags2: number, version: number): DecodedFlag[] {
   }));
 }
 
+export function readConventionalIdentifiers(storyData: Uint8Array): ConventionalIdentifiers {
+  return {
+    releaseNumber: readWord(storyData, 0x02),
+    serialCode: readAsciiString(storyData, 0x12, 6),
+  };
+}
+
 function readByte(storyData: Uint8Array, offset: number): number {
   const b = storyData[offset];
 
@@ -258,6 +270,16 @@ function readWord(storyData: Uint8Array, offset: number): number {
   }
 
   return (byte1 << 8) | byte2;
+}
+
+function readAsciiString(storyData: Uint8Array, offset: number, length: number): string {
+  let result = "";
+
+  for (let i = 0; i < length; i++) {
+    result += String.fromCharCode(readByte(storyData, offset + i));
+  }
+
+  return result;
 }
 
 function loadStoryFile(path: string): Uint8Array {
@@ -325,6 +347,10 @@ function main(): void {
     const scope = applicable ? "applicable at this version" : "NOT applicable at this version";
     console.log(`  bit ${bit} (${name}): ${status} — ${scope}`);
   });
+
+  const ids = readConventionalIdentifiers(storyData);
+
+  console.log(`Release: ${ids.releaseNumber}, Serial: ${ids.serialCode}`);
 }
 
 if (import.meta.main) {

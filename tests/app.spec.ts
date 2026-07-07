@@ -3,6 +3,7 @@ import {
   decodeFlags1,
   decodeFlags1Conventions,
   decodeFlags2,
+  readConventionalIdentifiers,
   readMemoryMap,
   readRawFlags,
   readVersion,
@@ -157,12 +158,13 @@ describe("validateMemoryMap", () => {
 
 describe("readRawFlags", () => {
   test("reads flags1 and flags2 correctly", () => {
-    const fakeStory = new Uint8Array(18);
-    fakeStory[0x01] = 0b01010101; // arbitrary flags1 pattern
-    fakeStory[0x10] = 0x00;
-    fakeStory[0x11] = 0b00010011; // arbitrary flags2 low byte pattern
+    const mockStory = new Uint8Array(18);
 
-    const flags = readRawFlags(fakeStory);
+    mockStory[0x01] = 0b01010101; // arbitrary flags1 pattern
+    mockStory[0x10] = 0x00;
+    mockStory[0x11] = 0b00010011; // arbitrary flags2 low byte pattern
+
+    const flags = readRawFlags(mockStory);
 
     expect(flags.flags1).toBe(0b01010101);
     expect(flags.flags2).toBe(0x0013);
@@ -234,5 +236,24 @@ describe("decodeFlags1Conventions", () => {
   test("omits the Tandy bit entirely for a V6 file", () => {
     const results = decodeFlags1Conventions(0b00001000, 6); // bit 3 set, but V6
     expect(results.some((r) => r.name === "tandyBit")).toBe(false);
+  });
+});
+
+describe("readConventionalIdentifiers", () => {
+  test("reads release number and serial code correctly", () => {
+    const mockStory = new Uint8Array(24);
+
+    mockStory[0x02] = 0x00;
+    mockStory[0x03] = 0x17; // release number = 23
+
+    const serial = "840509"; // Zork I release 76's actual serial, per Appendix D's table
+    for (let i = 0; i < 6; i++) {
+      mockStory[0x12 + i] = serial.charCodeAt(i);
+    }
+
+    const result = readConventionalIdentifiers(mockStory);
+
+    expect(result.releaseNumber).toBe(23);
+    expect(result.serialCode).toBe("840509");
   });
 });

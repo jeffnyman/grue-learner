@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import {
+  decodeFlags1,
   decodeFlags2,
   readMemoryMap,
   readRawFlags,
@@ -190,5 +191,33 @@ describe("decodeFlags2", () => {
 
     expect(resultsV1.find((r) => r.name === "transcriptingOn")!.applicable).toBe(true);
     expect(resultsV8.find((r) => r.name === "transcriptingOn")!.applicable).toBe(true);
+  });
+});
+
+describe("decodeFlags1", () => {
+  test("uses the V1-3 table for a V3 file", () => {
+    const results = decodeFlags1(0b00000010, 3); // bit 1 set
+    const statusLine = results.find((r) => r.name === "statusLineIsTimeBased")!;
+
+    expect(statusLine.set).toBe(true);
+    expect(statusLine.applicable).toBe(true);
+    expect(results.some((r) => r.name === "coloursAvailable")).toBe(false); // V4+ concept shouldn't appear
+  });
+
+  test("uses the V4+ table for a V5 file", () => {
+    const results = decodeFlags1(0b00000001, 5); // bit 0 set
+    const colours = results.find((r) => r.name === "coloursAvailable")!;
+
+    expect(colours.set).toBe(true);
+    expect(colours.applicable).toBe(true);
+    expect(results.some((r) => r.name === "statusLineIsTimeBased")).toBe(false); // V1-3 concept shouldn't appear
+  });
+
+  test("marks V6-only bits as not applicable for a V4 file", () => {
+    const results = decodeFlags1(0b00100000, 4); // bit 5 (sound) set
+    const sound = results.find((r) => r.name === "soundEffectsAvailable")!;
+
+    expect(sound.set).toBe(true);
+    expect(sound.applicable).toBe(false); // sound needs V6, this is V4
   });
 });

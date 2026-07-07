@@ -19,6 +19,31 @@ interface RawFlags {
   flags2: number;
 }
 
+interface Flags2BitDefinition {
+  bit: number;
+  name: string;
+  minVersion: number;
+}
+
+const FLAGS2_BITS: Flags2BitDefinition[] = [
+  { bit: 0, name: "transcriptingOn", minVersion: 1 },
+  { bit: 1, name: "forceFixedPitch", minVersion: 3 },
+  { bit: 2, name: "wantsScreenRedraw", minVersion: 6 },
+  { bit: 3, name: "wantsPictures", minVersion: 5 },
+  { bit: 4, name: "wantsUndo", minVersion: 5 },
+  { bit: 5, name: "wantsMouse", minVersion: 5 },
+  { bit: 6, name: "wantsColours", minVersion: 5 },
+  { bit: 7, name: "wantsSoundEffects", minVersion: 5 },
+  { bit: 8, name: "wantsMenus", minVersion: 6 },
+];
+
+interface DecodedFlag {
+  bit: number;
+  name: string;
+  set: boolean;
+  applicable: boolean; // true only if this version defines a meaning for this bit
+}
+
 const KNOWN_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export function readVersion(storyData: Uint8Array): number {
@@ -126,6 +151,15 @@ export function readRawFlags(storyData: Uint8Array): RawFlags {
   };
 }
 
+export function decodeFlags2(flags2: number, version: number): DecodedFlag[] {
+  return FLAGS2_BITS.map(({ bit, name, minVersion }) => ({
+    bit,
+    name,
+    set: ((flags2 >> bit) & 1) === 1,
+    applicable: version >= minVersion,
+  }));
+}
+
 function readByte(storyData: Uint8Array, offset: number): number {
   const b = storyData[offset];
 
@@ -165,13 +199,14 @@ function main(): void {
   }
 
   const storyData = loadStoryFile(path);
+  const version = readVersion(storyData);
 
   console.log(`Loaded ${storyData.length} bytes from ${path}`);
   console.log(`First 16 bytes:`, Array.from(storyData.slice(0, 16)));
 
   const map = readMemoryMap(storyData);
 
-  console.log(`Version: ${readVersion(storyData)}`);
+  console.log(`Version: ${version}`);
   console.log({
     highMemoryBase: toHex(map.highMemoryBase),
     dictionaryAddress: toHex(map.dictionaryAddress),
@@ -191,6 +226,16 @@ function main(): void {
 
   console.log(`Flags 1: ${flags.flags1.toString(2).padStart(8, "0")}`);
   console.log(`Flags 2: ${flags.flags2.toString(2).padStart(16, "0")}`);
+
+  const flags2Decoded = decodeFlags2(flags.flags2, version);
+
+  console.log("\nFlags 2 breakdown:");
+
+  flags2Decoded.forEach(({ bit, name, set, applicable }) => {
+    const status = set ? "SET  " : "unset";
+    const scope = applicable ? "applicable at this version" : "NOT applicable at this version";
+    console.log(`  bit ${bit} (${name}): ${status} — ${scope}`);
+  });
 }
 
 if (import.meta.main) {

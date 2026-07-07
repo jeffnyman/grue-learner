@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import {
+  decodeFlags2,
   readMemoryMap,
   readRawFlags,
   readVersion,
@@ -163,5 +164,31 @@ describe("readRawFlags", () => {
 
     expect(flags.flags1).toBe(0b01010101);
     expect(flags.flags2).toBe(0x0013);
+  });
+});
+
+describe("decodeFlags2", () => {
+  test("marks bit 4 as set but NOT applicable for a V3 story file", () => {
+    const results = decodeFlags2(0b0000000000010000, 3); // Lurking Horror r219 pattern
+    const undoBit = results.find((r) => r.name === "wantsUndo")!;
+
+    expect(undoBit.set).toBe(true);
+    expect(undoBit.applicable).toBe(false); // this is the whole point
+  });
+
+  test("marks bit 4 as set AND applicable for a V5 story file", () => {
+    const results = decodeFlags2(0b0000000010010000, 5); // Sherlock pattern
+    const undoBit = results.find((r) => r.name === "wantsUndo")!;
+
+    expect(undoBit.set).toBe(true);
+    expect(undoBit.applicable).toBe(true);
+  });
+
+  test("marks bit 0 (transcripting) as applicable at every version", () => {
+    const resultsV1 = decodeFlags2(0b1, 1);
+    const resultsV8 = decodeFlags2(0b1, 8);
+
+    expect(resultsV1.find((r) => r.name === "transcriptingOn")!.applicable).toBe(true);
+    expect(resultsV8.find((r) => r.name === "transcriptingOn")!.applicable).toBe(true);
   });
 });

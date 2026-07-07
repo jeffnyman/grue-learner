@@ -5,7 +5,9 @@ import {
   validateDynamicMemoryMinimum,
   validateDynamicStaticMaximum,
   validateHighDynamicNonOverlap,
+  validateMemoryMap,
   validateStaticMemoryCeiling,
+  type MemoryMap,
 } from "../src/app.js";
 
 describe("readVersion", () => {
@@ -116,5 +118,35 @@ describe("validateDynamicStaticMaximum", () => {
   test("still respects fileLength as the tighter bound in a small file", () => {
     const result = validateDynamicStaticMaximum(2000, 1000);
     expect(result.passed).toBe(false);
+  });
+});
+
+describe("validateMemoryMap", () => {
+  test("returns 4 results, all passing, for a well-formed memory map", () => {
+    const map: MemoryMap = {
+      highMemoryBase: 0x6059,
+      dictionaryAddress: 0x47fe,
+      objectTableAddress: 0x03fc,
+      globalsAddress: 0x02b0,
+      staticMemoryBase: 0x3b3e,
+    };
+    const results = validateMemoryMap(map, 105264);
+
+    expect(results).toHaveLength(4);
+    expect(results.every((r) => r.passed)).toBe(true);
+  });
+
+  test("surfaces multiple simultaneous failures, not just the first", () => {
+    const map: MemoryMap = {
+      highMemoryBase: 100, // will fail non-overlap check
+      dictionaryAddress: 0,
+      objectTableAddress: 0,
+      globalsAddress: 0,
+      staticMemoryBase: 65535, // will fail dynamic+static maximum check
+    };
+    const results = validateMemoryMap(map, 500000);
+
+    const failures = results.filter((r) => !r.passed);
+    expect(failures.length).toBeGreaterThanOrEqual(2);
   });
 });

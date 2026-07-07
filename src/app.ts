@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-interface MemoryMap {
+export interface MemoryMap {
   highMemoryBase: number;
   dictionaryAddress: number;
   objectTableAddress: number;
@@ -105,6 +105,15 @@ export function validateDynamicStaticMaximum(
   };
 }
 
+export function validateMemoryMap(map: MemoryMap, fileLength: number): VaildationResult[] {
+  return [
+    validateDynamicMemoryMinimum(map.staticMemoryBase),
+    validateStaticMemoryCeiling(map.staticMemoryBase, fileLength),
+    validateHighDynamicNonOverlap(map.highMemoryBase, map.staticMemoryBase),
+    validateDynamicStaticMaximum(map.staticMemoryBase, fileLength),
+  ];
+}
+
 function readWord(storyData: Uint8Array, offset: number): number {
   const byte1 = storyData[offset];
   const byte2 = storyData[offset + 1];
@@ -149,10 +158,12 @@ function main(): void {
     staticMemoryBase: toHex(map.staticMemoryBase),
   });
 
-  console.log(validateDynamicMemoryMinimum(map.staticMemoryBase));
-  console.log(validateStaticMemoryCeiling(map.staticMemoryBase, storyData.length));
-  console.log(validateHighDynamicNonOverlap(map.highMemoryBase, map.staticMemoryBase));
-  console.log(validateDynamicStaticMaximum(map.staticMemoryBase, storyData.length));
+  const results = validateMemoryMap(map, storyData.length);
+
+  results.forEach((r) => {
+    console.log(r.passed ? "✅" : "❌", r.rule);
+    if (!r.passed) console.log("   ", r.detail);
+  });
 }
 
 if (import.meta.main) {

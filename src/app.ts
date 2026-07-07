@@ -52,6 +52,25 @@ export function validateDynamicMemoryMinimum(staticMemoryBase: number): Vaildati
   };
 }
 
+export function validateStaticMemoryCeiling(
+  staticMemoryBase: number,
+  fileLength: number,
+): VaildationResult {
+  // Ceiling is one past 0xFFFF, the highest legal byte address.
+  const ADDRESSING_CEILING = 0x10000;
+
+  const effectiveBoundary = Math.min(fileLength, ADDRESSING_CEILING);
+  const passed = staticMemoryBase <= effectiveBoundary;
+
+  return {
+    rule: "Static memory must end by EOF or $0FFFF, whichever is lower (Standard §1.1)",
+    passed,
+    detail: passed
+      ? `staticMemoryBase = ${staticMemoryBase} is within the effective boundary of ${effectiveBoundary} (min of fileLength=${fileLength}, ceiling=${ADDRESSING_CEILING})`
+      : `staticMemoryBase = ${staticMemoryBase} exceeds the effective boundary of ${effectiveBoundary} (min of fileLength=${fileLength}, ceiling=${ADDRESSING_CEILING})`,
+  };
+}
+
 function readWord(storyData: Uint8Array, offset: number): number {
   const byte1 = storyData[offset];
   const byte2 = storyData[offset + 1];
@@ -86,6 +105,7 @@ function main(): void {
   console.log(`First 16 bytes:`, Array.from(storyData.slice(0, 16)));
 
   const map = readMemoryMap(storyData);
+
   console.log(`Version: ${readVersion(storyData)}`);
   console.log({
     highMemoryBase: toHex(map.highMemoryBase),
@@ -96,6 +116,7 @@ function main(): void {
   });
 
   console.log(validateDynamicMemoryMinimum(map.staticMemoryBase));
+  console.log(validateStaticMemoryCeiling(map.staticMemoryBase, storyData.length));
 }
 
 if (import.meta.main) {

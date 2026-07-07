@@ -1,5 +1,10 @@
 import { describe, test, expect } from "vitest";
-import { readMemoryMap, readVersion, validateDynamicMemoryMinimum } from "../src/app.js";
+import {
+  readMemoryMap,
+  readVersion,
+  validateDynamicMemoryMinimum,
+  validateStaticMemoryCeiling,
+} from "../src/app.js";
 
 describe("readVersion", () => {
   test("reads a valid version byte", () => {
@@ -47,6 +52,28 @@ describe("validateDynamicMemoryMinimum", () => {
 
   test("fails when staticMemoryBase is below 64", () => {
     const result = validateDynamicMemoryMinimum(32);
+    expect(result.passed).toBe(false);
+  });
+});
+
+describe("validateStaticMemoryCeiling", () => {
+  test("passes when staticMemoryBase is well within a small file", () => {
+    const result = validateStaticMemoryCeiling(0x3b3e, 105264);
+    expect(result.passed).toBe(true);
+  });
+
+  test("passes when staticMemoryBase sits right at the file's end", () => {
+    const result = validateStaticMemoryCeiling(1000, 1000);
+    expect(result.passed).toBe(true);
+  });
+
+  test("fails when staticMemoryBase exceeds the file length", () => {
+    const result = validateStaticMemoryCeiling(2000, 1000);
+    expect(result.passed).toBe(false);
+  });
+
+  test("fails when staticMemoryBase exceeds the 64K ceiling, even in a huge file", () => {
+    const result = validateStaticMemoryCeiling(0x10001, 500000);
     expect(result.passed).toBe(false);
   });
 });

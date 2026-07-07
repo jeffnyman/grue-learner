@@ -32,6 +32,14 @@ interface Flags2BitDefinition {
   minVersion: number;
 }
 
+interface ConventionalFlagDefinition {
+  bit: number;
+  name: string;
+  minVersion: number;
+  maxVersion?: number;
+  source: string; // where this convention comes from, since it's not normative
+}
+
 const FLAGS1_V1_TO_V3: Flags1BitDefinition[] = [
   { bit: 1, name: "statusLineIsTimeBased", minVersion: 1, maxVersion: 3 },
   { bit: 2, name: "storySplitAcrossDiscs", minVersion: 1, maxVersion: 3 },
@@ -48,6 +56,17 @@ const FLAGS1_V4_PLUS: Flags1BitDefinition[] = [
   { bit: 4, name: "fixedSpaceAvailable", minVersion: 4 },
   { bit: 5, name: "soundEffectsAvailable", minVersion: 6 },
   { bit: 7, name: "timedInputAvailable", minVersion: 4 },
+];
+
+const FLAGS1_CONVENTIONS: ConventionalFlagDefinition[] = [
+  {
+    bit: 3,
+    name: "tandyBit",
+    minVersion: 1,
+    maxVersion: 3,
+    source:
+      "Appendix B: 'The legendary Tandy bit' — marked Int only (not Dyn) in the table, meaning formally only the interpreter is documented as licensed to set it (e.g. Tandy-hardware interpreters injecting it into live RAM after load). 'The Witness' Release 18's $DB/$TANDY debugger sequence is an attested but undocumented developer backdoor, not a Standard-sanctioned game-write mechanism.",
+  },
 ];
 
 const FLAGS2_BITS: Flags2BitDefinition[] = [
@@ -67,6 +86,14 @@ interface DecodedFlag {
   name: string;
   set: boolean;
   applicable: boolean; // true only if this version defines a meaning for this bit
+}
+
+interface DecodedConventionalFlag {
+  bit: number;
+  name: string;
+  set: boolean;
+  applicable: boolean;
+  source: string;
 }
 
 const KNOWN_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -184,6 +211,22 @@ export function decodeFlags1(flags1: number, version: number): DecodedFlag[] {
     name,
     set: ((flags1 >> bit) & 1) === 1,
     applicable: version >= minVersion && (maxVersion === undefined || version <= maxVersion),
+  }));
+}
+
+export function decodeFlags1Conventions(
+  flags1: number,
+  version: number,
+): DecodedConventionalFlag[] {
+  return FLAGS1_CONVENTIONS.filter(
+    ({ minVersion, maxVersion }) =>
+      version >= minVersion && (maxVersion === undefined || version <= maxVersion),
+  ).map(({ bit, name, source }) => ({
+    bit,
+    name,
+    set: ((flags1 >> bit) & 1) === 1,
+    applicable: true, // it only appears in this list if it's in scope for the version
+    source,
   }));
 }
 

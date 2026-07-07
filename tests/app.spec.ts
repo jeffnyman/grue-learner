@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import {
   decodeFlags1,
+  decodeFlags1Conventions,
   decodeFlags2,
   readMemoryMap,
   readRawFlags,
@@ -219,5 +220,19 @@ describe("decodeFlags1", () => {
 
     expect(sound.set).toBe(true);
     expect(sound.applicable).toBe(false); // sound needs V6, this is V4
+  });
+});
+
+describe("decodeFlags1Conventions", () => {
+  test("detects the Tandy bit when set on a V3 file", () => {
+    const results = decodeFlags1Conventions(0b00001000, 3); // bit 3 set
+    const tandy = results.find((r) => r.name === "tandyBit")!;
+
+    expect(tandy.set).toBe(true);
+  });
+
+  test("omits the Tandy bit entirely for a V6 file", () => {
+    const results = decodeFlags1Conventions(0b00001000, 6); // bit 3 set, but V6
+    expect(results.some((r) => r.name === "tandyBit")).toBe(false);
   });
 });

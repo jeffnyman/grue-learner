@@ -17,7 +17,7 @@ import {
   validateStaticMemoryCeiling,
   verifyChecksum,
   type MemoryMap,
-} from "../src/header.js";
+} from "../src/header.ts";
 
 describe("readVersion", () => {
   test("reads a valid version byte", () => {

@@ -40,7 +40,9 @@
     "skipLibCheck": true,
 
     // Added Options
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "emitDeclarationOnly": true
   },
   "include": ["src", "tests"]
 }

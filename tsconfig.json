@@ -41,5 +41,6 @@
 
     // Added Options
     "erasableSyntaxOnly": true
-  }
+  },
+  "include": ["src", "tests"]
 }

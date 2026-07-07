@@ -4,6 +4,7 @@ import {
   decodeFlags1Conventions,
   decodeFlags2,
   readConventionalIdentifiers,
+  readInformVersionField,
   readMemoryMap,
   readRawFlags,
   readVersion,
@@ -255,5 +256,28 @@ describe("readConventionalIdentifiers", () => {
 
     expect(result.releaseNumber).toBe(23);
     expect(result.serialCode).toBe("840509");
+  });
+});
+
+describe("readInformVersionField", () => {
+  test("recognizes a valid Inform version string", () => {
+    const mockStory = new Uint8Array(64);
+    const version = "6.11";
+
+    for (let i = 0; i < 4; i++) {
+      mockStory[0x3c + i] = version.charCodeAt(i);
+    }
+
+    const result = readInformVersionField(mockStory);
+
+    expect(result.raw).toBe("6.11");
+    expect(result.looksLikeInform6).toBe(true);
+  });
+
+  test("does not flag an all-zero field as Inform", () => {
+    const mockStory = new Uint8Array(64); // all zeros by default
+    const result = readInformVersionField(mockStory);
+
+    expect(result.looksLikeInform6).toBe(false);
   });
 });

@@ -40,6 +40,11 @@ interface ConventionalFlagDefinition {
   source: string; // where this convention comes from, since it's not normative
 }
 
+interface InformVersionField {
+  raw: string; // the 4 raw bytes, decoded as ASCII regardless of content
+  looksLikeInform6: boolean; // heuristic: does this look like a real version string?
+}
+
 const FLAGS1_V1_TO_V3: Flags1BitDefinition[] = [
   { bit: 1, name: "statusLineIsTimeBased", minVersion: 1, maxVersion: 3 },
   { bit: 2, name: "storySplitAcrossDiscs", minVersion: 1, maxVersion: 3 },
@@ -251,6 +256,15 @@ export function readConventionalIdentifiers(storyData: Uint8Array): Conventional
   };
 }
 
+export function readInformVersionField(storyData: Uint8Array): InformVersionField {
+  const raw = readAsciiString(storyData, 0x3c, 4);
+
+  // Heuristic: Inform version strings look like "N.NN" — a digit, a dot, two digits.
+  const looksLikeInform6 = /^\d\.\d\d$/.test(raw);
+
+  return { raw, looksLikeInform6 };
+}
+
 function readByte(storyData: Uint8Array, offset: number): number {
   const b = storyData[offset];
 
@@ -351,6 +365,12 @@ function main(): void {
   const ids = readConventionalIdentifiers(storyData);
 
   console.log(`Release: ${ids.releaseNumber}, Serial: ${ids.serialCode}`);
+
+  const informVersion = readInformVersionField(storyData);
+
+  console.log(
+    `Bytes at 0x3C: "${informVersion.raw}" — looks like Inform 6: ${informVersion.looksLikeInform6}`,
+  );
 }
 
 if (import.meta.main) {

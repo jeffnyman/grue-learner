@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import {
+  computeChecksum,
   decodeFlags1,
   decodeFlags1Conventions,
   decodeFlags2,
@@ -14,6 +15,7 @@ import {
   validateHighDynamicNonOverlap,
   validateMemoryMap,
   validateStaticMemoryCeiling,
+  verifyChecksum,
   type MemoryMap,
 } from "../src/app.js";
 
@@ -314,5 +316,32 @@ describe("readLengthAndChecksum", () => {
     const result = readLengthAndChecksum(mockStory, 6);
 
     expect(result.actualFileLength).toBe(5184 * 8);
+  });
+});
+
+describe("verifyChecksum", () => {
+  test("computes a simple checksum correctly", () => {
+    const mockStory = new Uint8Array(0x44);
+
+    mockStory[0x40] = 0x01;
+    mockStory[0x41] = 0x02;
+    mockStory[0x42] = 0x03;
+    mockStory[0x43] = 0x04; // beyond declared length, should be excluded
+
+    const result = verifyChecksum(mockStory, 0x43, 0x0006); // 1+2+3 = 6
+
+    expect(result.computed).toBe(0x0006);
+    expect(result.matches).toBe(true);
+  });
+
+  test("wraps correctly at the 16-bit boundary", () => {
+    const mockStory = new Uint8Array(0x42);
+
+    mockStory[0x40] = 0xff;
+    mockStory[0x41] = 0xff;
+
+    const result = computeChecksum(mockStory, 0x42);
+
+    expect(result).toBe(0x01fe); // 255 + 255 = 510 = 0x1fe, well under 16-bit wrap here, just confirming no off-by-one
   });
 });

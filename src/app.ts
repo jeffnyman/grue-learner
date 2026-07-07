@@ -45,6 +45,12 @@ interface InformVersionField {
   looksLikeInform6: boolean; // heuristic: does this look like a real version string?
 }
 
+interface ChecksumVerification {
+  computed: number;
+  stored: number;
+  matches: boolean;
+}
+
 const FLAGS1_V1_TO_V3: Flags1BitDefinition[] = [
   { bit: 1, name: "statusLineIsTimeBased", minVersion: 1, maxVersion: 3 },
   { bit: 2, name: "storySplitAcrossDiscs", minVersion: 1, maxVersion: 3 },
@@ -279,6 +285,31 @@ export function readLengthAndChecksum(storyData: Uint8Array, version: number): L
   return { rawLengthField, actualFileLength, checksum };
 }
 
+export function verifyChecksum(
+  storyData: Uint8Array,
+  declaredLength: number,
+  storedChecksum: number,
+): ChecksumVerification {
+  const computed = computeChecksum(storyData, declaredLength);
+
+  return {
+    computed,
+    stored: storedChecksum,
+    matches: computed === storedChecksum,
+  };
+}
+
+export function computeChecksum(storyData: Uint8Array, declaredLength: number): number {
+  let sum = 0;
+  const end = Math.min(declaredLength, storyData.length);
+
+  for (let i = 0x40; i < end; i++) {
+    sum = (sum + readByte(storyData, i)) & 0xffff; // keep to 16 bits, i.e. modulo $10000
+  }
+
+  return sum;
+}
+
 function lengthScaleFactor(version: number): number {
   if (version <= 3) return 2;
   if (version <= 5) return 4;
@@ -397,6 +428,15 @@ function main(): void {
   console.log(`Header-declared length: ${lenAndChecksum.actualFileLength}`);
   console.log(`Actual file byte count: ${storyData.length}`);
   console.log(`Checksum (raw): 0x${lenAndChecksum.checksum.toString(16)}`);
+
+  const checksumResult = verifyChecksum(
+    storyData,
+    lenAndChecksum.actualFileLength,
+    lenAndChecksum.checksum,
+  );
+  console.log(
+    `Checksum: computed=0x${checksumResult.computed.toString(16)}, stored=0x${checksumResult.stored.toString(16)}, match=${checksumResult.matches}`,
+  );
 }
 
 if (import.meta.main) {

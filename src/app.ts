@@ -71,6 +71,21 @@ export function validateStaticMemoryCeiling(
   };
 }
 
+export function validateHighDynamicNonOverlap(
+  highMemoryBase: number,
+  staticMemoryBase: number,
+): VaildationResult {
+  const passed = highMemoryBase >= staticMemoryBase;
+
+  return {
+    rule: "High memory must not overlap dynamic memory (Standard §1.1)",
+    passed,
+    detail: passed
+      ? `highMemoryBase = ${highMemoryBase} is at or after staticMemoryBase = ${staticMemoryBase}; no dynamic overlap`
+      : `highMemoryBase = ${highMemoryBase} is before staticMemoryBase = ${staticMemoryBase}; high memory would overlap dynamic memory`,
+  };
+}
+
 function readWord(storyData: Uint8Array, offset: number): number {
   const byte1 = storyData[offset];
   const byte2 = storyData[offset + 1];
@@ -117,6 +132,7 @@ function main(): void {
 
   console.log(validateDynamicMemoryMinimum(map.staticMemoryBase));
   console.log(validateStaticMemoryCeiling(map.staticMemoryBase, storyData.length));
+  console.log(validateHighDynamicNonOverlap(map.highMemoryBase, map.staticMemoryBase));
 }
 
 if (import.meta.main) {

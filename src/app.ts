@@ -14,6 +14,11 @@ interface VaildationResult {
   detail: string;
 }
 
+interface RawFlags {
+  flags1: number;
+  flags2: number;
+}
+
 const KNOWN_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export function readVersion(storyData: Uint8Array): number {
@@ -114,6 +119,23 @@ export function validateMemoryMap(map: MemoryMap, fileLength: number): Vaildatio
   ];
 }
 
+export function readRawFlags(storyData: Uint8Array): RawFlags {
+  return {
+    flags1: readByte(storyData, 0x01),
+    flags2: readWord(storyData, 0x10),
+  };
+}
+
+function readByte(storyData: Uint8Array, offset: number): number {
+  const b = storyData[offset];
+
+  if (b === undefined) {
+    throw new Error(`Cannot read byte at offset ${offset}: insufficient data`);
+  }
+
+  return b;
+}
+
 function readWord(storyData: Uint8Array, offset: number): number {
   const byte1 = storyData[offset];
   const byte2 = storyData[offset + 1];
@@ -164,6 +186,11 @@ function main(): void {
     console.log(r.passed ? "✅" : "❌", r.rule);
     if (!r.passed) console.log("   ", r.detail);
   });
+
+  const flags = readRawFlags(storyData);
+
+  console.log(`Flags 1: ${flags.flags1.toString(2).padStart(8, "0")}`);
+  console.log(`Flags 2: ${flags.flags2.toString(2).padStart(16, "0")}`);
 }
 
 if (import.meta.main) {

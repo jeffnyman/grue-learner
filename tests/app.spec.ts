@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import {
   readMemoryMap,
+  readRawFlags,
   readVersion,
   validateDynamicMemoryMinimum,
   validateDynamicStaticMaximum,
@@ -148,5 +149,19 @@ describe("validateMemoryMap", () => {
 
     const failures = results.filter((r) => !r.passed);
     expect(failures.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("readRawFlags", () => {
+  test("reads flags1 and flags2 correctly", () => {
+    const fakeStory = new Uint8Array(18);
+    fakeStory[0x01] = 0b01010101; // arbitrary flags1 pattern
+    fakeStory[0x10] = 0x00;
+    fakeStory[0x11] = 0b00010011; // arbitrary flags2 low byte pattern
+
+    const flags = readRawFlags(fakeStory);
+
+    expect(flags.flags1).toBe(0b01010101);
+    expect(flags.flags2).toBe(0x0013);
   });
 });

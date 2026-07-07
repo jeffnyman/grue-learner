@@ -5,6 +5,7 @@ import {
   decodeFlags2,
   readConventionalIdentifiers,
   readInformVersionField,
+  readLengthAndChecksum,
   readMemoryMap,
   readRawFlags,
   readVersion,
@@ -279,5 +280,39 @@ describe("readInformVersionField", () => {
     const result = readInformVersionField(mockStory);
 
     expect(result.looksLikeInform6).toBe(false);
+  });
+});
+
+describe("readLengthAndChecksum", () => {
+  test("decodes actual length correctly for a V3 file (scale factor 2)", () => {
+    const mockStory = new Uint8Array(32);
+    mockStory[0x1a] = 0x14;
+    mockStory[0x1b] = 0x40; // raw = 0x1440 = 5184
+
+    const result = readLengthAndChecksum(mockStory, 3);
+
+    expect(result.actualFileLength).toBe(5184 * 2);
+  });
+
+  test("decodes actual length correctly for a V5 file (scale factor 4)", () => {
+    const mockStory = new Uint8Array(32);
+
+    mockStory[0x1a] = 0x14;
+    mockStory[0x1b] = 0x40;
+
+    const result = readLengthAndChecksum(mockStory, 5);
+
+    expect(result.actualFileLength).toBe(5184 * 4);
+  });
+
+  test("decodes actual length correctly for a V6 file (scale factor 8)", () => {
+    const mockStory = new Uint8Array(32);
+
+    mockStory[0x1a] = 0x14;
+    mockStory[0x1b] = 0x40;
+
+    const result = readLengthAndChecksum(mockStory, 6);
+
+    expect(result.actualFileLength).toBe(5184 * 8);
   });
 });

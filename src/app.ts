@@ -106,6 +106,12 @@ interface ConventionalIdentifiers {
   serialCode: string; // offset 0x12, 6 bytes ASCII
 }
 
+interface LengthAndChecksum {
+  rawLengthField: number; // as stored in the header, still scaled down
+  actualFileLength: number; // decoded to real bytes
+  checksum: number; // raw stored value, not yet verified
+}
+
 const KNOWN_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export function readVersion(storyData: Uint8Array): number {
@@ -265,6 +271,20 @@ export function readInformVersionField(storyData: Uint8Array): InformVersionFiel
   return { raw, looksLikeInform6 };
 }
 
+export function readLengthAndChecksum(storyData: Uint8Array, version: number): LengthAndChecksum {
+  const rawLengthField = readWord(storyData, 0x1a);
+  const checksum = readWord(storyData, 0x1c);
+  const actualFileLength = rawLengthField * lengthScaleFactor(version);
+
+  return { rawLengthField, actualFileLength, checksum };
+}
+
+function lengthScaleFactor(version: number): number {
+  if (version <= 3) return 2;
+  if (version <= 5) return 4;
+  return 8; // V6-8
+}
+
 function readByte(storyData: Uint8Array, offset: number): number {
   const b = storyData[offset];
 
@@ -371,6 +391,12 @@ function main(): void {
   console.log(
     `Bytes at 0x3C: "${informVersion.raw}" — looks like Inform 6: ${informVersion.looksLikeInform6}`,
   );
+
+  const lenAndChecksum = readLengthAndChecksum(storyData, version);
+
+  console.log(`Header-declared length: ${lenAndChecksum.actualFileLength}`);
+  console.log(`Actual file byte count: ${storyData.length}`);
+  console.log(`Checksum (raw): 0x${lenAndChecksum.checksum.toString(16)}`);
 }
 
 if (import.meta.main) {

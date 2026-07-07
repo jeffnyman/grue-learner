@@ -86,6 +86,25 @@ export function validateHighDynamicNonOverlap(
   };
 }
 
+export function validateDynamicStaticMaximum(
+  staticMemoryBase: number,
+  fileLength: number,
+): VaildationResult {
+  // 64K - 2 bytes (Standard §1, Remarks)
+  const MAX_DYNAMIC_PLUS_STATIC = 65534;
+
+  const effectiveBoundary = Math.min(fileLength, MAX_DYNAMIC_PLUS_STATIC);
+  const passed = staticMemoryBase <= effectiveBoundary;
+
+  return {
+    rule: "Dynamic + static memory must not exceed 64K minus 2 bytes (Standard §1, Remarks)",
+    passed,
+    detail: passed
+      ? `staticMemoryBase = ${staticMemoryBase} is within the effective boundary of ${effectiveBoundary} (min of fileLength=${fileLength}, max=${MAX_DYNAMIC_PLUS_STATIC})`
+      : `staticMemoryBase = ${staticMemoryBase} exceeds the effective boundary of ${effectiveBoundary} (min of fileLength=${fileLength}, max=${MAX_DYNAMIC_PLUS_STATIC})`,
+  };
+}
+
 function readWord(storyData: Uint8Array, offset: number): number {
   const byte1 = storyData[offset];
   const byte2 = storyData[offset + 1];
@@ -133,6 +152,7 @@ function main(): void {
   console.log(validateDynamicMemoryMinimum(map.staticMemoryBase));
   console.log(validateStaticMemoryCeiling(map.staticMemoryBase, storyData.length));
   console.log(validateHighDynamicNonOverlap(map.highMemoryBase, map.staticMemoryBase));
+  console.log(validateDynamicStaticMaximum(map.staticMemoryBase, storyData.length));
 }
 
 if (import.meta.main) {

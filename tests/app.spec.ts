@@ -3,6 +3,7 @@ import {
   readMemoryMap,
   readVersion,
   validateDynamicMemoryMinimum,
+  validateDynamicStaticMaximum,
   validateHighDynamicNonOverlap,
   validateStaticMemoryCeiling,
 } from "../src/app.js";
@@ -92,6 +93,28 @@ describe("validateHighDynamicNonOverlap", () => {
 
   test("fails when highMemoryBase falls before staticMemoryBase", () => {
     const result = validateHighDynamicNonOverlap(1000, 2000);
+    expect(result.passed).toBe(false);
+  });
+});
+
+describe("validateDynamicStaticMaximum", () => {
+  test("passes when staticMemoryBase is well within a small file", () => {
+    const result = validateDynamicStaticMaximum(0x3b3e, 105264);
+    expect(result.passed).toBe(true);
+  });
+
+  test("passes when staticMemoryBase sits exactly at the 65534 ceiling", () => {
+    const result = validateDynamicStaticMaximum(65534, 500000);
+    expect(result.passed).toBe(true);
+  });
+
+  test("fails when staticMemoryBase is 65535 — one byte past the documented max", () => {
+    const result = validateDynamicStaticMaximum(65535, 500000);
+    expect(result.passed).toBe(false);
+  });
+
+  test("still respects fileLength as the tighter bound in a small file", () => {
+    const result = validateDynamicStaticMaximum(2000, 1000);
     expect(result.passed).toBe(false);
   });
 });

@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { readWord } from "./utils.ts";
+import { loadStoryFile, readWord } from "./utils.ts";
 
 export interface MemoryMap {
   highMemoryBase: number;
@@ -336,12 +335,6 @@ function readAsciiString(storyData: Uint8Array, offset: number, length: number):
 
   return result;
 }
-
-function loadStoryFile(path: string): Uint8Array {
-  const buffer = readFileSync(path);
-  return new Uint8Array(buffer);
-}
-
 function toHex(n: number, width: number = 4): string {
   return "0x" + n.toString(16).padStart(width, "0");
 }

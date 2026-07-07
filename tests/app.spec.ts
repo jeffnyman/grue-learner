@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { readMemoryMap, readVersion } from "../src/app.js";
+import { readMemoryMap, readVersion, validateDynamicMemoryMinimum } from "../src/app.js";
 
 describe("readVersion", () => {
   test("reads a valid version byte", () => {
@@ -32,4 +32,21 @@ describe("readMemoryMap", () => {
     expect(map.globalsAddress).toBe(0x00cc);
     expect(map.staticMemoryBase).toBe(0x00dd);
   })
+});
+
+describe("validateDynamicMemoryMinimum", () => {
+  test("passes when staticMemoryBase is exactly 64", () => {
+    const result = validateDynamicMemoryMinimum(64);
+    expect(result.passed).toBe(true);
+  });
+
+  test("passes when staticMemoryBase is well above 64", () => {
+    const result = validateDynamicMemoryMinimum(0x3b3e);
+    expect(result.passed).toBe(true);
+  });
+
+  test("fails when staticMemoryBase is below 64", () => {
+    const result = validateDynamicMemoryMinimum(32);
+    expect(result.passed).toBe(false);
+  });
 });

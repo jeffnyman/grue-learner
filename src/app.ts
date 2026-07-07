@@ -8,6 +8,12 @@ interface MemoryMap {
   staticMemoryBase: number;
 }
 
+interface VaildationResult {
+  rule: string;
+  passed: boolean;
+  detail: string;
+}
+
 const KNOWN_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export function readVersion(storyData: Uint8Array): number {
@@ -30,6 +36,19 @@ export function readMemoryMap(storyData: Uint8Array): MemoryMap {
     objectTableAddress: readWord(storyData, 0x0a),
     globalsAddress: readWord(storyData, 0x0c),
     staticMemoryBase: readWord(storyData, 0x0e),
+  };
+}
+
+export function validateDynamicMemoryMinimum(staticMemoryBase: number): VaildationResult {
+  const MINIMUM_DYNAMIC_MEMORY = 64;
+  const passed = staticMemoryBase >= MINIMUM_DYNAMIC_MEMORY;
+
+  return {
+    rule: "Dynamic memory must be at least 64 bytes (Standard §1.1)",
+    passed,
+    detail: passed
+      ? `staticMemoryBase = ${staticMemoryBase}, dynamic memory = ${staticMemoryBase} bytes`
+      : `staticMemoryBase = ${staticMemoryBase} is less than the required minimum of ${MINIMUM_DYNAMIC_MEMORY}`,
   };
 }
 
@@ -75,6 +94,8 @@ function main(): void {
     globalsAddress: toHex(map.globalsAddress),
     staticMemoryBase: toHex(map.staticMemoryBase),
   });
+
+  console.log(validateDynamicMemoryMinimum(map.staticMemoryBase));
 }
 
 if (import.meta.main) {

@@ -20,9 +20,8 @@ export interface DecoderState {
 }
 
 interface DecodedToken {
-  type: "zscii" | "abbreviation" | "escape";
+  type: "zscii" | "escape" | "abbreviationError";
   value?: number; // for "zscii": the ZSCII code
-  zchar?: number; // for "abbreviation": which trigger character (1, 2, or 3)
 }
 
 interface DecodedZString {
@@ -135,42 +134,98 @@ export function translateZCharacter(
   return { type: "output", zscii, newState: resetToLock(state) };
 }
 
-export function decodeZString(
+function flattenZCharacters(
   storyData: Uint8Array,
   startAddress: number,
-  version: number,
-): DecodedZString {
-  const tokens: DecodedToken[] = [];
+): { zchars: number[]; wordsConsumed: number } {
+  const zchars: number[] = [];
 
-  let state: DecoderState = { current: 0, lock: 0 };
   let address = startAddress;
   let wordsConsumed = 0;
 
   while (true) {
-    const { zchars, isEnd } = unpackWordAt(storyData, address);
+    const { zchars: three, isEnd } = unpackWordAt(storyData, address);
 
+    zchars.push(...three);
     wordsConsumed++;
-
-    for (const zchar of zchars) {
-      const result = translateZCharacter(zchar, state, version);
-
-      state = result.newState;
-
-      if (result.type === "output") {
-        tokens.push({ type: "zscii", value: result.zscii });
-      } else if (result.type === "abbreviation") {
-        tokens.push({ type: "abbreviation", zchar });
-      } else if (result.type === "escape") {
-        tokens.push({ type: "escape" });
-      }
-      // "shift" produces no token — it only updates state, per §3.2.4
-    }
 
     if (isEnd) break;
 
     address += 2;
   }
 
+  return { zchars, wordsConsumed };
+}
+
+function decodeZCharArray(
+  zchars: number[],
+  version: number,
+  storyData: Uint8Array,
+  abbreviationsTableAddress: number,
+  allowAbbreviations: boolean,
+): DecodedToken[] {
+  let state: DecoderState = { current: 0, lock: 0 };
+  const tokens: DecodedToken[] = [];
+  let i = 0;
+
+  while (i < zchars.length) {
+    const zchar = zchars[i];
+
+    if (zchar === undefined) {
+      i++;
+      continue;
+    }
+
+    const result = translateZCharacter(zchar, state, version);
+
+    state = result.newState;
+
+    if (result.type === "output") {
+      tokens.push({ type: "zscii", value: result.zscii });
+      i++;
+    } else if (result.type === "shift") {
+      i++;
+    } else if (result.type === "escape") {
+      tokens.push({ type: "escape" }); // still deferred to the next step
+      i++;
+    } else if (result.type === "abbreviation") {
+      const z = zchars[i];
+      const x = zchars[i + 1];
+      i += 2;
+
+      if (z === undefined || x === undefined) continue; // incomplete trailing construction, §3.6.1: ignore
+
+      if (!allowAbbreviations) {
+        tokens.push({ type: "abbreviationError" });
+        continue;
+      }
+
+      const index = 32 * (z - 1) + x;
+      const entryWord = readWord(storyData, abbreviationsTableAddress + index * 2);
+      const entryByteAddress = entryWord * 2;
+      const { zchars: innerZchars } = flattenZCharacters(storyData, entryByteAddress);
+      const innerTokens = decodeZCharArray(
+        innerZchars,
+        version,
+        storyData,
+        abbreviationsTableAddress,
+        false,
+      );
+      tokens.push(...innerTokens);
+    }
+  }
+
+  return tokens;
+}
+
+export function decodeZString(
+  storyData: Uint8Array,
+  startAddress: number,
+  version: number,
+  abbreviationsTableAddress: number,
+): DecodedZString {
+  const { zchars, wordsConsumed } = flattenZCharacters(storyData, startAddress);
+  const tokens = decodeZCharArray(zchars, version, storyData, abbreviationsTableAddress, true);
   return { tokens, wordsConsumed };
 }
 
@@ -201,10 +256,6 @@ function main(): void {
 
   const map: MemoryMap = readMemoryMap(storyData);
 
-  // This is no longer as useful.
-  // const result = unpackWordAt(storyData, map.dictionaryAddress);
-  // console.log(result);
-
   console.log(`Abbreviations table address: 0x${map.abbreviationsTableAddress.toString(16)}`);
 
   const firstAbbrAddr = readAbbreviationEntry(storyData, map.abbreviationsTableAddress, 0);
@@ -213,7 +264,7 @@ function main(): void {
   const unpacked = unpackWordAt(storyData, firstAbbrAddr);
   console.log(unpacked);
 
-  const result = decodeZString(storyData, firstAbbrAddr, version);
+  const result = decodeZString(storyData, firstAbbrAddr, version, map.abbreviationsTableAddress);
 
   console.log(
     result.tokens

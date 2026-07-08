@@ -136,7 +136,7 @@ describe("decodeZString", () => {
     mockStory[0] = (word >> 8) & 0xff;
     mockStory[1] = word & 0xff;
 
-    const result = decodeZString(mockStory, 0, 5);
+    const result = decodeZString(mockStory, 0, 5, 0);
 
     expect(result.wordsConsumed).toBe(1);
     expect(result.tokens).toEqual([
@@ -160,22 +160,48 @@ describe("decodeZString", () => {
     mockStory[2] = (word2 >> 8) & 0xff;
     mockStory[3] = word2 & 0xff;
 
-    const result = decodeZString(mockStory, 0, 1);
+    const result = decodeZString(mockStory, 0, 1, 0);
 
     // zchar 4 -> shift, no token. Then 'A','A' from word1, then 'A' from word2 (lock held!), then two spaces.
-    expect(result.tokens.map((t) => t.value)).toEqual([65, 65, 65, 32, 32]);
+    expect(result.tokens.map((t: any) => t.value)).toEqual([65, 65, 65, 32, 32]);
     expect(result.wordsConsumed).toBe(2);
   });
+});
 
-  test("flags abbreviations rather than resolving them", () => {
-    const mockStory = new Uint8Array(2);
-    const word = (1 << 15) | (1 << 10) | (5 << 5) | 5; // zchar 1 = abbrev trigger in V5
+describe("decodeZString with abbreviation resolution", () => {
+  test("resolves a simple abbreviation reference and reports wordsConsumed", () => {
+    const mockStory = new Uint8Array(68);
+    mockStory[0x00] = 0x00;
+    mockStory[0x01] = 0x20; // entry 0 -> word addr 0x20 -> byte 0x40
 
-    mockStory[0] = (word >> 8) & 0xff;
-    mockStory[1] = word & 0xff;
+    const word = (1 << 15) | (25 << 10) | (13 << 5) | 10; // "the", end-bit set
+    mockStory[0x40] = (word >> 8) & 0xff;
+    mockStory[0x41] = word & 0xff;
 
-    const result = decodeZString(mockStory, 0, 5);
+    const mainWord = (1 << 15) | (1 << 10) | (0 << 5) | 0; // trigger, index=0, pad, end-bit=1
+    mockStory[0x42] = (mainWord >> 8) & 0xff;
+    mockStory[0x43] = mainWord & 0xff;
 
-    expect(result.tokens[0]).toEqual({ type: "abbreviation", zchar: 1 });
+    const result = decodeZString(mockStory, 0x42, 5, 0x00);
+
+    expect(result.tokens.map((t) => t.value)).toEqual([116, 104, 101, 32]); // "the" + ONE trailing space
+    expect(result.wordsConsumed).toBe(1); // the OUTER string is only 1 word; the inner abbreviation's length doesn't count here
+  });
+
+  test("flags recursive abbreviation use as an error rather than recursing", () => {
+    const mockStory = new Uint8Array(70);
+    mockStory[0x00] = 0x00;
+    mockStory[0x01] = 0x20;
+
+    const innerWord = (1 << 15) | (1 << 10) | (0 << 5) | 0;
+    mockStory[0x40] = (innerWord >> 8) & 0xff;
+    mockStory[0x41] = innerWord & 0xff;
+
+    const mainWord = (1 << 15) | (1 << 10) | (0 << 5) | 0;
+    mockStory[0x42] = (mainWord >> 8) & 0xff;
+    mockStory[0x43] = mainWord & 0xff;
+
+    const result = decodeZString(mockStory, 0x42, 5, 0x00);
+    expect(result.tokens[0]?.type).toBe("abbreviationError");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { unpackWord } from "../src/app.ts";
+import { readAbbreviationEntry, unpackWord } from "../src/app.ts";
 
 describe("tautology", () => {
   test("reality still works", () => {
@@ -33,5 +33,30 @@ describe("unpackWord", () => {
 
     expect(result.zchars).toEqual([0, 0, 0]);
     expect(result.isEnd).toBe(true);
+  });
+});
+
+describe("readAbbreviationEntry", () => {
+  test("converts a word address to a byte address by doubling it", () => {
+    const mockStory = new Uint8Array(10);
+    const tableAddr = 0x00;
+
+    mockStory[0x00] = 0x01;
+    mockStory[0x01] = 0x00; // word address = 0x0100 = 256
+
+    const result = readAbbreviationEntry(mockStory, tableAddr, 0);
+
+    expect(result).toBe(512); // 256 * 2
+  });
+
+  test("reads the correct entry when index > 0", () => {
+    const mockStory = new Uint8Array(10);
+
+    mockStory[0x02] = 0x00;
+    mockStory[0x03] = 0x0a; // entry 1: word address = 10
+
+    const result = readAbbreviationEntry(mockStory, 0x00, 1);
+
+    expect(result).toBe(20);
   });
 });

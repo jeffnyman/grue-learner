@@ -15,6 +15,15 @@ export function unpackWord(word: number): UnpackedWord {
   return { zchars: [first, second, third], isEnd };
 }
 
+export function readAbbreviationEntry(
+  storyData: Uint8Array,
+  abbreviationsTableAddress: number,
+  index: number,
+): number {
+  const wordAddress = readWord(storyData, abbreviationsTableAddress + index * 2);
+  return wordAddress * 2; // convert word address to byte address, per §1.2.2
+}
+
 function unpackWordAt(storyData: Uint8Array, offset: number): UnpackedWord {
   return unpackWord(readWord(storyData, offset));
 }
@@ -35,6 +44,12 @@ function main(): void {
   console.log(result);
 
   console.log(`Abbreviations table address: 0x${map.abbreviationsTableAddress.toString(16)}`);
+
+  const firstAbbrAddr = readAbbreviationEntry(storyData, map.abbreviationsTableAddress, 0);
+  console.log(`First abbreviation byte address: 0x${firstAbbrAddr.toString(16)}`);
+
+  const unpacked = unpackWordAt(storyData, firstAbbrAddr);
+  console.log(unpacked);
 }
 
 if (import.meta.main) {

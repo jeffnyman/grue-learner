@@ -15,3 +15,13 @@ export function readWord(storyData: Uint8Array, offset: number): number {
 
   return (byte1 << 8) | byte2;
 }
+
+export function readByte(storyData: Uint8Array, offset: number): number {
+  const b = storyData[offset];
+
+  if (b === undefined) {
+    throw new Error(`Cannot read byte at offset ${offset}: insufficient data`);
+  }
+
+  return b;
+}

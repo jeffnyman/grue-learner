@@ -1,4 +1,4 @@
-import { loadStoryFile, readWord } from "./utils.ts";
+import { loadStoryFile, readByte, readWord } from "./utils.ts";
 
 export interface MemoryMap {
   highMemoryBase: number;
@@ -315,16 +315,6 @@ function lengthScaleFactor(version: number): number {
   if (version <= 3) return 2;
   if (version <= 5) return 4;
   return 8; // V6-8
-}
-
-function readByte(storyData: Uint8Array, offset: number): number {
-  const b = storyData[offset];
-
-  if (b === undefined) {
-    throw new Error(`Cannot read byte at offset ${offset}: insufficient data`);
-  }
-
-  return b;
 }
 
 function readAsciiString(storyData: Uint8Array, offset: number, length: number): string {

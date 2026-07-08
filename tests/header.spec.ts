@@ -34,13 +34,14 @@ describe("readVersion", () => {
 describe("readMemoryMap", () => {
   // prettier-ignore
   test("reads all five pointers correctly", () => {
-    const mockStory = new Uint8Array(16);
+    const mockStory = new Uint8Array(26);
 
     mockStory[0x04] = 0x12; mockStory[0x05] = 0x34; // highMemoryBase = 0x1234
     mockStory[0x08] = 0x00; mockStory[0x09] = 0xaa; // dictionaryAddress = 0x00AA
     mockStory[0x0a] = 0x00; mockStory[0x0b] = 0xbb; // objectTableAddress = 0x00BB
     mockStory[0x0c] = 0x00; mockStory[0x0d] = 0xcc; // globalsAddress = 0x00CC
     mockStory[0x0e] = 0x00; mockStory[0x0f] = 0xdd; // staticMemoryBase = 0x00DD
+    mockStory[0x18] = 0x12; mockStory[0x19] = 0x34; // abbreviationsTableAddress = 0X0034
 
     const map = readMemoryMap(mockStory);
 
@@ -49,6 +50,7 @@ describe("readMemoryMap", () => {
     expect(map.objectTableAddress).toBe(0x00bb);
     expect(map.globalsAddress).toBe(0x00cc);
     expect(map.staticMemoryBase).toBe(0x00dd);
+    expect(map.abbreviationsTableAddress).toBe(0x1234);
   })
 });
 
@@ -138,6 +140,7 @@ describe("validateMemoryMap", () => {
       objectTableAddress: 0x03fc,
       globalsAddress: 0x02b0,
       staticMemoryBase: 0x3b3e,
+      abbreviationsTableAddress: 0x1f4,
     };
     const results = validateMemoryMap(map, 105264);
 
@@ -152,6 +155,7 @@ describe("validateMemoryMap", () => {
       objectTableAddress: 0,
       globalsAddress: 0,
       staticMemoryBase: 65535, // will fail dynamic+static maximum check
+      abbreviationsTableAddress: 0x1f4,
     };
     const results = validateMemoryMap(map, 500000);
 

@@ -6,6 +6,7 @@ export interface MemoryMap {
   objectTableAddress: number;
   globalsAddress: number;
   staticMemoryBase: number;
+  abbreviationsTableAddress: number;
 }
 
 interface VaildationResult {
@@ -140,6 +141,7 @@ export function readMemoryMap(storyData: Uint8Array): MemoryMap {
     objectTableAddress: readWord(storyData, 0x0a),
     globalsAddress: readWord(storyData, 0x0c),
     staticMemoryBase: readWord(storyData, 0x0e),
+    abbreviationsTableAddress: readWord(storyData, 0x18),
   };
 }
 
@@ -309,7 +311,6 @@ export function computeChecksum(storyData: Uint8Array, declaredLength: number): 
 
   return sum;
 }
-
 function lengthScaleFactor(version: number): number {
   if (version <= 3) return 2;
   if (version <= 5) return 4;

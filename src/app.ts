@@ -33,6 +33,8 @@ function main(): void {
   const result = unpackWordAt(storyData, map.dictionaryAddress);
 
   console.log(result);
+
+  console.log(`Abbreviations table address: 0x${map.abbreviationsTableAddress.toString(16)}`);
 }
 
 if (import.meta.main) {

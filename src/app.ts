@@ -20,8 +20,8 @@ export interface DecoderState {
 }
 
 interface DecodedToken {
-  type: "zscii" | "escape" | "abbreviationError";
-  value?: number; // for "zscii": the ZSCII code
+  type: "zscii" | "abbreviationError";
+  value?: number;
 }
 
 interface DecodedZString {
@@ -157,7 +157,7 @@ function flattenZCharacters(
   return { zchars, wordsConsumed };
 }
 
-function decodeZCharArray(
+export function decodeZCharArray(
   zchars: number[],
   version: number,
   storyData: Uint8Array,
@@ -171,13 +171,9 @@ function decodeZCharArray(
   while (i < zchars.length) {
     const zchar = zchars[i];
 
-    if (zchar === undefined) {
-      i++;
-      continue;
-    }
+    if (zchar === undefined) break;
 
     const result = translateZCharacter(zchar, state, version);
-
     state = result.newState;
 
     if (result.type === "output") {
@@ -186,8 +182,16 @@ function decodeZCharArray(
     } else if (result.type === "shift") {
       i++;
     } else if (result.type === "escape") {
-      tokens.push({ type: "escape" }); // still deferred to the next step
-      i++;
+      const top = zchars[i + 1];
+      const bottom = zchars[i + 2];
+
+      if (top === undefined || bottom === undefined) {
+        break; // incomplete trailing construction, §3.6.1: ignore, and nothing legal follows
+      }
+
+      const code = (top << 5) | bottom;
+      tokens.push({ type: "zscii", value: code });
+      i += 3; // trigger + two raw fields
     } else if (result.type === "abbreviation") {
       const z = zchars[i];
       const x = zchars[i + 1];

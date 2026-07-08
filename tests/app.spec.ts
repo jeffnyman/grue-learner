@@ -205,3 +205,37 @@ describe("decodeZString with abbreviation resolution", () => {
     expect(result.tokens[0]?.type).toBe("abbreviationError");
   });
 });
+
+describe("decodeZString with escape resolution", () => {
+  test("resolves a full ZSCII escape into a single 10-bit code", () => {
+    // Word 1: zchar 5 (single-shift A0->A2), zchar 6 (escape trigger), zchar 4 (top 5 bits), end-bit=0
+    const mockStory = new Uint8Array(4);
+    const word1 = (0 << 15) | (5 << 10) | (6 << 5) | 4;
+    mockStory[0] = (word1 >> 8) & 0xff;
+    mockStory[1] = word1 & 0xff;
+
+    // Word 2: zchar 27 (bottom 5 bits), zchar 0, zchar 0, end-bit=1
+    const word2 = (1 << 15) | (27 << 10) | (0 << 5) | 0;
+    mockStory[2] = (word2 >> 8) & 0xff;
+    mockStory[3] = word2 & 0xff;
+
+    const result = decodeZString(mockStory, 0, 3, 0);
+
+    // (4 << 5) | 27 = 128 + 27 = 155
+    expect(result.tokens.map((t) => t.value)).toEqual([155, 32, 32]);
+    expect(result.wordsConsumed).toBe(2);
+  });
+
+  test("ignores an incomplete trailing escape construction", () => {
+    // zchar 0 (space), zchar 5 (shift to A2), zchar 6 (escape trigger) -- then nothing
+    const mockStory = new Uint8Array(2);
+    const word = (1 << 15) | (0 << 10) | (5 << 5) | 6;
+    mockStory[0] = (word >> 8) & 0xff;
+    mockStory[1] = word & 0xff;
+
+    const result = decodeZString(mockStory, 0, 3, 0);
+
+    // Only the leading space should appear; the incomplete escape produces nothing
+    expect(result.tokens.map((t) => t.value)).toEqual([32]);
+  });
+});

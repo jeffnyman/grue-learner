@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import {
+  decodeZString,
   readAbbreviationEntry,
   translateZCharacter,
   unpackWord,
@@ -122,5 +123,59 @@ describe("translateZCharacter", () => {
   test("Z-char 7 in A2 is '<' in V1", () => {
     const result = translateZCharacter(7, { current: 2, lock: 0 }, 1);
     expect(result).toMatchObject({ type: "output", zscii: 60 });
+  });
+});
+
+describe("decodeZString", () => {
+  test("decodes a single-word string ending immediately", () => {
+    // Z-chars: 6, 9, 14 (a=6->'a'? let's use simple known values)
+    // word: end-bit=1, first=6, second=9, third=14
+    const mockStory = new Uint8Array(2);
+    const word = (1 << 15) | (6 << 10) | (9 << 5) | 14;
+
+    mockStory[0] = (word >> 8) & 0xff;
+    mockStory[1] = word & 0xff;
+
+    const result = decodeZString(mockStory, 0, 5);
+
+    expect(result.wordsConsumed).toBe(1);
+    expect(result.tokens).toEqual([
+      { type: "zscii", value: 97 }, // 'a' (A0, zchar 6)
+      { type: "zscii", value: 100 }, // 'd' (A0, zchar 9)
+      { type: "zscii", value: 105 }, // 'i' (A0, zchar 14)
+    ]);
+  });
+
+  test("carries state across a word boundary (shift-lock persists into next word)", () => {
+    // Word 1 (V1): zchar 4 (shift-lock to A1), zchar 6 ('A'), zchar 6 ('A'), end-bit=0
+    const mockStory = new Uint8Array(4);
+    const word1 = (0 << 15) | (4 << 10) | (6 << 5) | 6;
+
+    mockStory[0] = (word1 >> 8) & 0xff;
+    mockStory[1] = word1 & 0xff;
+
+    // Word 2 (V1): zchar 6 ('A' still, since lock persisted), zchar 0, zchar 0, end-bit=1
+    const word2 = (1 << 15) | (6 << 10) | (0 << 5) | 0;
+
+    mockStory[2] = (word2 >> 8) & 0xff;
+    mockStory[3] = word2 & 0xff;
+
+    const result = decodeZString(mockStory, 0, 1);
+
+    // zchar 4 -> shift, no token. Then 'A','A' from word1, then 'A' from word2 (lock held!), then two spaces.
+    expect(result.tokens.map((t) => t.value)).toEqual([65, 65, 65, 32, 32]);
+    expect(result.wordsConsumed).toBe(2);
+  });
+
+  test("flags abbreviations rather than resolving them", () => {
+    const mockStory = new Uint8Array(2);
+    const word = (1 << 15) | (1 << 10) | (5 << 5) | 5; // zchar 1 = abbrev trigger in V5
+
+    mockStory[0] = (word >> 8) & 0xff;
+    mockStory[1] = word & 0xff;
+
+    const result = decodeZString(mockStory, 0, 5);
+
+    expect(result.tokens[0]).toEqual({ type: "abbreviation", zchar: 1 });
   });
 });

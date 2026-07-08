@@ -1,5 +1,5 @@
 import { loadStoryFile, readWord } from "./utils.ts";
-import { readMemoryMap, type MemoryMap } from "./header.ts";
+import { readMemoryMap, readVersion, type MemoryMap } from "./header.ts";
 
 type Alphabet = 0 | 1 | 2;
 
@@ -17,6 +17,17 @@ interface UnpackedWord {
 export interface DecoderState {
   current: Alphabet;
   lock: Alphabet; // only ever changes in V1-2
+}
+
+interface DecodedToken {
+  type: "zscii" | "abbreviation" | "escape";
+  value?: number; // for "zscii": the ZSCII code
+  zchar?: number; // for "abbreviation": which trigger character (1, 2, or 3)
+}
+
+interface DecodedZString {
+  tokens: DecodedToken[];
+  wordsConsumed: number;
 }
 
 const A0_TABLE = Array.from({ length: 26 }, (_, i) => 97 + i); // 'a'-'z'
@@ -124,6 +135,45 @@ export function translateZCharacter(
   return { type: "output", zscii, newState: resetToLock(state) };
 }
 
+export function decodeZString(
+  storyData: Uint8Array,
+  startAddress: number,
+  version: number,
+): DecodedZString {
+  const tokens: DecodedToken[] = [];
+
+  let state: DecoderState = { current: 0, lock: 0 };
+  let address = startAddress;
+  let wordsConsumed = 0;
+
+  while (true) {
+    const { zchars, isEnd } = unpackWordAt(storyData, address);
+
+    wordsConsumed++;
+
+    for (const zchar of zchars) {
+      const result = translateZCharacter(zchar, state, version);
+
+      state = result.newState;
+
+      if (result.type === "output") {
+        tokens.push({ type: "zscii", value: result.zscii });
+      } else if (result.type === "abbreviation") {
+        tokens.push({ type: "abbreviation", zchar });
+      } else if (result.type === "escape") {
+        tokens.push({ type: "escape" });
+      }
+      // "shift" produces no token — it only updates state, per §3.2.4
+    }
+
+    if (isEnd) break;
+
+    address += 2;
+  }
+
+  return { tokens, wordsConsumed };
+}
+
 function alphabetTableFor(alphabet: Alphabet, version: number): number[] {
   if (alphabet === 0) return A0_TABLE;
   if (alphabet === 1) return A1_TABLE;
@@ -147,11 +197,13 @@ function main(): void {
   }
 
   const storyData = loadStoryFile(path);
+  const version = readVersion(storyData);
 
   const map: MemoryMap = readMemoryMap(storyData);
-  const result = unpackWordAt(storyData, map.dictionaryAddress);
 
-  console.log(result);
+  // This is no longer as useful.
+  // const result = unpackWordAt(storyData, map.dictionaryAddress);
+  // console.log(result);
 
   console.log(`Abbreviations table address: 0x${map.abbreviationsTableAddress.toString(16)}`);
 
@@ -160,6 +212,14 @@ function main(): void {
 
   const unpacked = unpackWordAt(storyData, firstAbbrAddr);
   console.log(unpacked);
+
+  const result = decodeZString(storyData, firstAbbrAddr, version);
+
+  console.log(
+    result.tokens
+      .map((t) => (t.type === "zscii" ? String.fromCharCode(t.value!) : `[${t.type}]`))
+      .join(""),
+  );
 }
 
 if (import.meta.main) {

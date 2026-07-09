@@ -3,6 +3,8 @@ import {
   readDictionary,
   readDictionaryEntry,
   readDictionaryHeader,
+  validateDictionarySortOrder,
+  type Dictionary,
   type DictionaryHeader,
 } from "../src/app.ts";
 
@@ -136,5 +138,46 @@ describe("readDictionary", () => {
     expect(dict.entries[0]!.data[0]).toBe(0xaa);
     expect(dict.entries[1]).toBeDefined();
     expect(dict.entries[1]!.data[0]).toBe(0xbb);
+  });
+});
+
+describe("validateDictionarySortOrder", () => {
+  test("passes for strictly ascending raw text", () => {
+    const dictionary: Dictionary = {
+      header: {} as DictionaryHeader,
+      entries: [
+        { index: 0, address: 0, rawText: [1, 0, 0, 0], text: "a", data: [] },
+        { index: 1, address: 0, rawText: [2, 0, 0, 0], text: "b", data: [] },
+      ],
+    };
+
+    const results = validateDictionarySortOrder(dictionary);
+    expect(results.every((r) => r.passed)).toBe(true);
+  });
+
+  test("fails on a duplicate encoded text", () => {
+    const dictionary: Dictionary = {
+      header: {} as DictionaryHeader,
+      entries: [
+        { index: 0, address: 0, rawText: [5, 0, 0, 0], text: "x", data: [] },
+        { index: 1, address: 0, rawText: [5, 0, 0, 0], text: "x", data: [] },
+      ],
+    };
+
+    const results = validateDictionarySortOrder(dictionary);
+    expect(results[0]!.passed).toBe(false);
+  });
+
+  test("fails on genuinely out-of-order entries", () => {
+    const dictionary: Dictionary = {
+      header: {} as DictionaryHeader,
+      entries: [
+        { index: 0, address: 0, rawText: [9, 0, 0, 0], text: "z", data: [] },
+        { index: 1, address: 0, rawText: [3, 0, 0, 0], text: "c", data: [] },
+      ],
+    };
+
+    const results = validateDictionarySortOrder(dictionary);
+    expect(results[0]!.passed).toBe(false);
   });
 });

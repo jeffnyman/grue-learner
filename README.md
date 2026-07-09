@@ -8,6 +8,16 @@ To execute:
 pnpm start
 ```
 
+To run the object dumper utility:
+
+```sh
+node .\\src\\dumpObjects.ts ..\\zcode\\zork1-invclues-r52-s871125.z5 properties
+```
+
+```sh
+node .\\src\\dumpObjects.ts ..\\zcode\\zork1-invclues-r52-s871125.z5 tree
+```
+
 To play a game online:
 
 - [https://iplayif.com/](https://iplayif.com/)

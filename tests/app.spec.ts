@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { readObjectEntry, readPropertyDefaultsTable } from "../src/app.ts";
+import { countObjects, readObjectEntry, readPropertyDefaultsTable } from "../src/app.ts";
 
 describe("tautology", () => {
   test("reality still works", () => {
@@ -79,5 +79,50 @@ describe("readObjectEntry", () => {
     expect(entry.sibling).toBe(200);
     expect(entry.child).toBe(50);
     expect(entry.propertyTableAddress).toBe(0x1000);
+  });
+});
+
+describe("countObjects", () => {
+  test("stops correctly when the next entry would collide with property data (V3)", () => {
+    const mockStory = new Uint8Array(30);
+    const base = 0x00;
+
+    // Object 1 (bytes 0-8): property pointer -> 18
+    mockStory[base + 7] = 0x00;
+    mockStory[base + 8] = 18;
+    // Object 2 (bytes 9-17): property pointer -> 18 (property data starts right after both entries)
+    mockStory[base + 16] = 0x00;
+    mockStory[base + 17] = 18;
+
+    const count = countObjects(mockStory, base, 3);
+    expect(count).toBe(2);
+  });
+
+  test("correctly identifies a single-object table (V3)", () => {
+    const mockStory = new Uint8Array(20);
+    const base = 0x00;
+
+    // Object 1 (bytes 0-8): property pointer -> 9 (immediately after this one entry)
+    mockStory[base + 7] = 0x00;
+    mockStory[base + 8] = 9;
+
+    const count = countObjects(mockStory, base, 3);
+    expect(count).toBe(1);
+  });
+
+  test("uses the MINIMUM property address seen, not just the last one (V3)", () => {
+    const mockStory = new Uint8Array(40);
+    const base = 0x00;
+
+    // Object 1: property pointer -> 30 (far away)
+    mockStory[base + 7] = 0x00;
+    mockStory[base + 8] = 30;
+    // Object 2: property pointer -> 18 (closer! this is the real boundary)
+    mockStory[base + 16] = 0x00;
+    mockStory[base + 17] = 18;
+
+    // A would-be object 3 would start at 18, which collides with the object 2's property table
+    const count = countObjects(mockStory, base, 3);
+    expect(count).toBe(2);
   });
 });

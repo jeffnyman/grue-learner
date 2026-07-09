@@ -70,6 +70,28 @@ export function readObjectEntry(
   };
 }
 
+export function countObjects(
+  storyData: Uint8Array,
+  firstObjectEntryAddress: number,
+  version: number,
+): number {
+  const size = entrySize(version);
+  let minPropertyTableAddress = Infinity;
+  let count = 0;
+  let address = firstObjectEntryAddress;
+
+  while (true) {
+    if (address + size > minPropertyTableAddress) break;
+
+    const entry = readObjectEntry(storyData, firstObjectEntryAddress, count + 1, version);
+    minPropertyTableAddress = Math.min(minPropertyTableAddress, entry.propertyTableAddress);
+    count++;
+    address += size;
+  }
+
+  return count;
+}
+
 function readAttributes(storyData: Uint8Array, address: number, byteCount: number): boolean[] {
   const attributes: boolean[] = [];
   for (let byteIndex = 0; byteIndex < byteCount; byteIndex++) {
@@ -117,6 +139,22 @@ function main(): void {
       .map((t) => (t.type === "zscii" ? String.fromCharCode(t.value!) : `[${t.type}]`))
       .join(""),
   );
+
+  const objectCount = countObjects(storyData, propDefaults.firstObjectEntryAddress, version);
+  console.log(`Object count: ${objectCount}`);
+
+  // v1 and v2 check
+  for (let i = 250; i <= 255; i++) {
+    const entry = readObjectEntry(storyData, propDefaults.firstObjectEntryAddress, i, version);
+    const nameAddr = entry.propertyTableAddress + 1;
+    const name = decodeZString(storyData, nameAddr, version, map.abbreviationsTableAddress);
+    console.log(
+      i,
+      name.tokens
+        .map((t) => (t.type === "zscii" ? String.fromCharCode(t.value!) : `[${t.type}]`))
+        .join(""),
+    );
+  }
 }
 
 if (import.meta.main) {

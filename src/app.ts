@@ -2,6 +2,11 @@ import { readMemoryMap, readVersion, type MemoryMap } from "./header.ts";
 import { loadStoryFile, readByte, readWord } from "./utils.ts";
 import { decodeZString } from "./zstring.ts";
 
+export interface Dictionary {
+  header: DictionaryHeader;
+  entries: DictionaryEntry[];
+}
+
 export interface DictionaryHeader {
   separatorCount: number;
   separators: number[]; // ZSCII codes
@@ -75,6 +80,23 @@ export function readDictionaryEntry(
   return { index, address, text, data };
 }
 
+export function readDictionary(
+  storyData: Uint8Array,
+  dictionaryAddress: number,
+  version: number,
+  abbreviationsTableAddress: number,
+): Dictionary {
+  const header = readDictionaryHeader(storyData, dictionaryAddress);
+  const count = Math.abs(header.entryCount);
+
+  const entries: DictionaryEntry[] = [];
+  for (let i = 0; i < count; i++) {
+    entries.push(readDictionaryEntry(storyData, header, i, version, abbreviationsTableAddress));
+  }
+
+  return { header, entries };
+}
+
 function textByteWidth(version: number): number {
   return version <= 3 ? 4 : 6;
 }
@@ -104,6 +126,22 @@ function main(): void {
   for (let i = 0; i < 10; i++) {
     console.log(
       readDictionaryEntry(storyData, dictHeader, i, version, map.abbreviationsTableAddress),
+    );
+  }
+
+  const dict = readDictionary(
+    storyData,
+    map.dictionaryAddress,
+    version,
+    map.abbreviationsTableAddress,
+  );
+  console.log(`Total entries: ${dict.entries.length} (header claims ${dict.header.entryCount})`);
+  console.log(dict.entries[dict.entries.length - 1]); // last entry, a new data point vs. our earlier first-10 spot check
+
+  const addr = 0x3f62; // r2, entry 347
+  for (let i = 0; i < 14; i++) {
+    console.log(
+      `0x${(addr + i).toString(16)}: 0x${((storyData[addr + i] ?? 0).toString(16)).padStart(2, "0")}`,
     );
   }
 }

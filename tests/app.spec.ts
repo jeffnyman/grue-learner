@@ -1,5 +1,10 @@
 import { describe, test, expect } from "vitest";
-import { readDictionaryEntry, readDictionaryHeader, type DictionaryHeader } from "../src/app.ts";
+import {
+  readDictionary,
+  readDictionaryEntry,
+  readDictionaryHeader,
+  type DictionaryHeader,
+} from "../src/app.ts";
 
 describe("tautology", () => {
   test("reality still works", () => {
@@ -97,5 +102,39 @@ describe("readDictionaryEntry", () => {
 
     const entry = readDictionaryEntry(mockStory, header, 3, 3, 0);
     expect(entry.address).toBe(address);
+  });
+});
+
+describe("readDictionary", () => {
+  test("walks a small dictionary and returns all entries in order", () => {
+    const mockStory = new Uint8Array(50);
+    const addr = 0x00;
+
+    mockStory[addr] = 0; // 0 separators
+    mockStory[addr + 1] = 7; // entry length
+    mockStory[addr + 2] = 0x00;
+    mockStory[addr + 3] = 2; // entryCount = 2
+
+    const firstEntryAddress = addr + 4;
+
+    // Entry 0: minimal terminated string (zchars 0,0,0, end-bit set), + 3 data bytes
+    const word0 = (1 << 15) | 0;
+    mockStory[firstEntryAddress] = (word0 >> 8) & 0xff;
+    mockStory[firstEntryAddress + 1] = word0 & 0xff;
+    mockStory[firstEntryAddress + 4] = 0xaa;
+
+    // Entry 1: same, at firstEntryAddress + 7
+    const word1 = (1 << 15) | 0;
+    mockStory[firstEntryAddress + 7] = (word1 >> 8) & 0xff;
+    mockStory[firstEntryAddress + 7 + 1] = word1 & 0xff;
+    mockStory[firstEntryAddress + 7 + 4] = 0xbb;
+
+    const dict = readDictionary(mockStory, addr, 3, 0);
+
+    expect(dict.entries.length).toBe(2);
+    expect(dict.entries[0]).toBeDefined();
+    expect(dict.entries[0]!.data[0]).toBe(0xaa);
+    expect(dict.entries[1]).toBeDefined();
+    expect(dict.entries[1]!.data[0]).toBe(0xbb);
   });
 });

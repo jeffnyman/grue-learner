@@ -1,5 +1,10 @@
 import { describe, test, expect } from "vitest";
-import { countObjects, readObjectEntry, readPropertyDefaultsTable } from "../src/app.ts";
+import {
+  countObjects,
+  readObjectEntry,
+  readObjectTable,
+  readPropertyDefaultsTable,
+} from "../src/app.ts";
 
 describe("tautology", () => {
   test("reality still works", () => {
@@ -124,5 +129,30 @@ describe("countObjects", () => {
     // A would-be object 3 would start at 18, which collides with the object 2's property table
     const count = countObjects(mockStory, base, 3);
     expect(count).toBe(2);
+  });
+});
+
+describe("readObjectTable", () => {
+  test("composes defaults, count, and all entries correctly (V3)", () => {
+    const mockStory = new Uint8Array(200);
+    const tableAddr = 0x00;
+
+    // property defaults table is 31 words (62 bytes); object entries start at 0x3E
+    const firstEntry = 0x3e;
+
+    // Object 1: property pointer -> firstEntry + 18 (i.e. right after 2 entries)
+    mockStory[firstEntry + 7] = 0x00;
+    mockStory[firstEntry + 8] = (firstEntry + 18) & 0xff;
+    // Object 2: property pointer -> same address (boundary)
+    mockStory[firstEntry + 16] = 0x00;
+    mockStory[firstEntry + 17] = (firstEntry + 18) & 0xff;
+
+    const result = readObjectTable(mockStory, tableAddr, 3);
+
+    expect(result.defaults.length).toBe(31);
+    expect(result.objectCount).toBe(2);
+    expect(result.objects.length).toBe(2);
+    expect(result.objects[0]?.number).toBe(1);
+    expect(result.objects[1]?.number).toBe(2);
   });
 });

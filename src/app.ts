@@ -16,6 +16,12 @@ interface ObjectEntry {
   propertyTableAddress: number;
 }
 
+export interface ObjectTable {
+  defaults: number[];
+  objectCount: number;
+  objects: ObjectEntry[];
+}
+
 function defaultsTableSize(version: number): number {
   return version <= 3 ? 31 : 63;
 }
@@ -92,6 +98,27 @@ export function countObjects(
   return count;
 }
 
+export function readObjectTable(
+  storyData: Uint8Array,
+  objectTableAddress: number,
+  version: number,
+): ObjectTable {
+  const { defaults, firstObjectEntryAddress } = readPropertyDefaultsTable(
+    storyData,
+    objectTableAddress,
+    version,
+  );
+
+  const objectCount = countObjects(storyData, firstObjectEntryAddress, version);
+
+  const objects: ObjectEntry[] = [];
+  for (let i = 1; i <= objectCount; i++) {
+    objects.push(readObjectEntry(storyData, firstObjectEntryAddress, i, version));
+  }
+
+  return { defaults, objectCount, objects };
+}
+
 function readAttributes(storyData: Uint8Array, address: number, byteCount: number): boolean[] {
   const attributes: boolean[] = [];
   for (let byteIndex = 0; byteIndex < byteCount; byteIndex++) {
@@ -143,7 +170,6 @@ function main(): void {
   const objectCount = countObjects(storyData, propDefaults.firstObjectEntryAddress, version);
   console.log(`Object count: ${objectCount}`);
 
-  // v1 and v2 check
   for (let i = 250; i <= 255; i++) {
     const entry = readObjectEntry(storyData, propDefaults.firstObjectEntryAddress, i, version);
     const nameAddr = entry.propertyTableAddress + 1;
@@ -153,6 +179,20 @@ function main(): void {
       name.tokens
         .map((t) => (t.type === "zscii" ? String.fromCharCode(t.value!) : `[${t.type}]`))
         .join(""),
+    );
+  }
+
+  const table = readObjectTable(storyData, map.objectTableAddress, version);
+  console.log(`Total objects: ${table.objectCount}`);
+
+  for (const obj of table.objects) {
+    const nameAddr = obj.propertyTableAddress + 1;
+    const name = decodeZString(storyData, nameAddr, version, map.abbreviationsTableAddress);
+    const text = name.tokens
+      .map((t) => (t.type === "zscii" ? String.fromCharCode(t.value!) : `[${t.type}]`))
+      .join("");
+    console.log(
+      `${obj.number}: "${text}" (parent=${obj.parent}, sibling=${obj.sibling}, child=${obj.child})`,
     );
   }
 }

@@ -4,6 +4,7 @@ import {
   readObjectEntry,
   readObjectTable,
   readPropertyDefaultsTable,
+  readPropertyList,
   readPropertyTableHeader,
 } from "../src/app.ts";
 
@@ -188,5 +189,42 @@ describe("readPropertyTableHeader", () => {
     expect(result.textLength).toBe(0);
     expect(result.shortName).toBe("");
     expect(result.propertiesStartAddress).toBe(tableAddr + 1); // properties start immediately, no name skipped
+  });
+});
+
+describe("readPropertyList", () => {
+  // prettier-ignore
+  test("parses a V3 property list, stopping at the terminator", () => {
+    // property 10, length 3 -> size byte = 32*(3-1)+10 = 74 = 0x4A
+    // property 2, length 1  -> size byte = 32*(1-1)+2  = 2  = 0x02
+    const mockStory = new Uint8Array(10);
+    let addr = 0;
+    mockStory[addr++] = 0x4a; mockStory[addr++] = 0x01; mockStory[addr++] = 0x02; mockStory[addr++] = 0x03;
+    mockStory[addr++] = 0x02; mockStory[addr++] = 0xff;
+    mockStory[addr++] = 0x00; // terminator
+
+    const result = readPropertyList(mockStory, 0, 3);
+
+    expect(result).toEqual([
+      { number: 10, dataAddress: 1, length: 3 },
+      { number: 2, dataAddress: 5, length: 1 },
+    ]);
+});
+
+  // prettier-ignore
+  test("parses a V5 property list, mixing short and long forms — this reconstructs the Standard's own mailbox worked example (49, 46, 45, 44)", () => {
+    const mockStory = new Uint8Array(20);
+    let addr = 0;
+    
+    mockStory[addr++] = 0x71; mockStory[addr++] = 0x00; mockStory[addr++] = 0x0a; // prop 49, short, len 2
+    mockStory[addr++] = 0xee; mockStory[addr++] = 0xc4; mockStory[addr++] = 0x54; mockStory[addr++] = 0xbf; mockStory[addr++] = 0x4a; mockStory[addr++] = 0xc3; // prop 46, long, len 4
+    mockStory[addr++] = 0x6d; mockStory[addr++] = 0x3e; mockStory[addr++] = 0xc1; // prop 45, short, len 2
+    mockStory[addr++] = 0x6c; mockStory[addr++] = 0x5b; mockStory[addr++] = 0x1c; // prop 44, short, len 2
+    mockStory[addr++] = 0x00; // terminator
+
+    const result = readPropertyList(mockStory, 0, 5);
+
+    expect(result.map(p => p.number)).toEqual([49, 46, 45, 44]);
+    expect(result.map(p => p.length)).toEqual([2, 4, 2, 2]);
   });
 });

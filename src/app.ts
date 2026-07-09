@@ -13,6 +13,12 @@ interface PropertyTableHeader {
   propertiesStartAddress: number;
 }
 
+export interface PropertyEntry {
+  number: number;
+  dataAddress: number;
+  length: number;
+}
+
 interface ObjectEntry {
   number: number;
   attributes: boolean[]; // index 0 = attribute 0, reading topmost-bit-first per §12.3.1
@@ -81,6 +87,46 @@ export function readPropertyTableHeader(
     shortName,
     propertiesStartAddress: nameAddress + textLength * 2, // skip past the declared word count
   };
+}
+
+export function readPropertyList(
+  storyData: Uint8Array,
+  propertiesStartAddress: number,
+  version: number,
+): PropertyEntry[] {
+  const properties: PropertyEntry[] = [];
+  let address = propertiesStartAddress;
+
+  while (true) {
+    const firstByte = readByte(storyData, address);
+    if (firstByte === 0) break; // terminator, §12.4.1 / §12.4.2
+
+    if (version <= 3) {
+      const number = firstByte & 0x1f;
+      const length = (firstByte >> 5) + 1;
+      properties.push({ number, dataAddress: address + 1, length });
+      address += 1 + length;
+      continue;
+    }
+
+    // V4+
+    const number = firstByte & 0x3f;
+    if ((firstByte & 0x80) === 0) {
+      // short form: one size byte
+      const length = firstByte & 0x40 ? 2 : 1;
+      properties.push({ number, dataAddress: address + 1, length });
+      address += 1 + length;
+    } else {
+      // long form: two size bytes
+      const secondByte = readByte(storyData, address + 1);
+      let length = secondByte & 0x3f;
+      if (length === 0) length = 64; // §12.4.2.1.1
+      properties.push({ number, dataAddress: address + 2, length });
+      address += 2 + length;
+    }
+  }
+
+  return properties;
 }
 
 export function readObjectEntry(
@@ -207,6 +253,18 @@ function main(): void {
       `${obj.number}: "${obj.shortName}" (parent=${obj.parent}, sibling=${obj.sibling}, child=${obj.child})`,
     );
   }
+
+  // Zork v5 confirmation only.
+  const obj = table.objects.find((o) => o.number === 239)!;
+  const header = readPropertyTableHeader(
+    storyData,
+    obj.propertyTableAddress,
+    version,
+    map.abbreviationsTableAddress,
+  );
+  const properties = readPropertyList(storyData, header.propertiesStartAddress, version);
+
+  console.log(properties);
 }
 
 if (import.meta.main) {

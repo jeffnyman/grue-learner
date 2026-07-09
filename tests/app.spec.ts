@@ -148,7 +148,7 @@ describe("readObjectTable", () => {
     mockStory[firstEntry + 16] = 0x00;
     mockStory[firstEntry + 17] = (firstEntry + 18) & 0xff;
 
-    const result = readObjectTable(mockStory, tableAddr, 3);
+    const result = readObjectTable(mockStory, tableAddr, 3, 0);
 
     expect(result.defaults.length).toBe(31);
     expect(result.objectCount).toBe(2);

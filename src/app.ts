@@ -25,7 +25,11 @@ interface ObjectEntry {
 export interface ObjectTable {
   defaults: number[];
   objectCount: number;
-  objects: ObjectEntry[];
+  objects: ObjectTableEntry[];
+}
+
+export interface ObjectTableEntry extends ObjectEntry {
+  shortName: string;
 }
 
 function defaultsTableSize(version: number): number {
@@ -137,6 +141,7 @@ export function readObjectTable(
   storyData: Uint8Array,
   objectTableAddress: number,
   version: number,
+  abbreviationsTableAddress: number,
 ): ObjectTable {
   const { defaults, firstObjectEntryAddress } = readPropertyDefaultsTable(
     storyData,
@@ -146,9 +151,16 @@ export function readObjectTable(
 
   const objectCount = countObjects(storyData, firstObjectEntryAddress, version);
 
-  const objects: ObjectEntry[] = [];
+  const objects: ObjectTableEntry[] = [];
   for (let i = 1; i <= objectCount; i++) {
-    objects.push(readObjectEntry(storyData, firstObjectEntryAddress, i, version));
+    const entry = readObjectEntry(storyData, firstObjectEntryAddress, i, version);
+    const header = readPropertyTableHeader(
+      storyData,
+      entry.propertyTableAddress,
+      version,
+      abbreviationsTableAddress,
+    );
+    objects.push({ ...entry, shortName: header.shortName });
   }
 
   return { defaults, objectCount, objects };
@@ -181,71 +193,18 @@ function main(): void {
   const version = readVersion(storyData);
   const map: MemoryMap = readMemoryMap(storyData);
 
-  const propDefaults = readPropertyDefaultsTable(storyData, map.objectTableAddress, version);
-  console.log(`Defaults table size: ${propDefaults.defaults.length}`);
-  console.log(`First object entry address: 0x${propDefaults.firstObjectEntryAddress.toString(16)}`);
-  console.log(propDefaults.defaults);
-
-  const entry = readObjectEntry(storyData, propDefaults.firstObjectEntryAddress, 239, version);
-  console.log(entry);
-
-  const shortNameAddress = entry.propertyTableAddress + 1; // skip the text-length byte
-  const shortName = decodeZString(
+  const table = readObjectTable(
     storyData,
-    shortNameAddress,
+    map.objectTableAddress,
     version,
     map.abbreviationsTableAddress,
   );
-  console.log(
-    shortName.tokens
-      .map((t) => (t.type === "zscii" ? String.fromCharCode(t.value!) : `[${t.type}]`))
-      .join(""),
-  );
 
-  const objectCount = countObjects(storyData, propDefaults.firstObjectEntryAddress, version);
-  console.log(`Object count: ${objectCount}`);
-
-  // Naive propertyTableAddress + 1 peek (replaced below)
-  // for (let i = 250; i <= 255; i++) {
-  //   const entry = readObjectEntry(storyData, propDefaults.firstObjectEntryAddress, i, version);
-  //   const nameAddr = entry.propertyTableAddress + 1;
-  //   const name = decodeZString(storyData, nameAddr, version, map.abbreviationsTableAddress);
-  //   console.log(
-  //     i,
-  //     name.tokens
-  //       .map((t) => (t.type === "zscii" ? String.fromCharCode(t.value!) : `[${t.type}]`))
-  //       .join(""),
-  //   );
-  // }
-
-  const table = readObjectTable(storyData, map.objectTableAddress, version);
   console.log(`Total objects: ${table.objectCount}`);
 
-  for (const num of [41, 82, 247, 23, 117]) {
-    const obj = table.objects[num - 1];
-
-    if (!obj) {
-      console.warn(`Object ${num} not found`);
-      continue;
-    }
-
-    const header = readPropertyTableHeader(
-      storyData,
-      obj.propertyTableAddress,
-      version,
-      map.abbreviationsTableAddress,
-    );
-    console.log(`${num}: "${header.shortName}" (textLength=${header.textLength})`);
-  }
-
   for (const obj of table.objects) {
-    const nameAddr = obj.propertyTableAddress + 1;
-    const name = decodeZString(storyData, nameAddr, version, map.abbreviationsTableAddress);
-    const text = name.tokens
-      .map((t) => (t.type === "zscii" ? String.fromCharCode(t.value!) : `[${t.type}]`))
-      .join("");
     console.log(
-      `${obj.number}: "${text}" (parent=${obj.parent}, sibling=${obj.sibling}, child=${obj.child})`,
+      `${obj.number}: "${obj.shortName}" (parent=${obj.parent}, sibling=${obj.sibling}, child=${obj.child})`,
     );
   }
 }

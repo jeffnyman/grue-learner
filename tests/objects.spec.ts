@@ -1,0 +1,230 @@
+import { describe, test, expect } from "vitest";
+import {
+  countObjects,
+  readObjectEntry,
+  readObjectTable,
+  readPropertyDefaultsTable,
+  readPropertyList,
+  readPropertyTableHeader,
+} from "../src/objects.ts";
+
+describe("tautology", () => {
+  test("reality still works", () => {
+    expect(1 + 1).toEqual(2);
+  });
+});
+
+describe("readPropertyDefaultsTable", () => {
+  test("reads 31 words for a V3 file and computes the correct offset", () => {
+    const mockStory = new Uint8Array(200);
+    const tableAddr = 0x10;
+
+    mockStory[tableAddr] = 0x00;
+    mockStory[tableAddr + 1] = 0x2a; // first default = 42
+
+    const result = readPropertyDefaultsTable(mockStory, tableAddr, 3);
+
+    expect(result.defaults.length).toBe(31);
+    expect(result.defaults[0]).toBe(42);
+    expect(result.firstObjectEntryAddress).toBe(tableAddr + 31 * 2);
+  });
+
+  test("reads 63 words for a V5 file and computes the correct offset", () => {
+    const mockStory = new Uint8Array(200);
+    const tableAddr = 0x10;
+
+    const result = readPropertyDefaultsTable(mockStory, tableAddr, 5);
+
+    expect(result.defaults.length).toBe(63);
+    expect(result.firstObjectEntryAddress).toBe(tableAddr + 63 * 2);
+  });
+});
+
+describe("readObjectEntry", () => {
+  test("reads a V3 (9-byte) entry with correct attribute bit ordering", () => {
+    const mockStory = new Uint8Array(20);
+    const base = 0x00;
+
+    mockStory[base + 0] = 0b10000000; // attribute 0 set (topmost bit of first byte)
+    mockStory[base + 1] = 0x00;
+    mockStory[base + 2] = 0x00;
+    mockStory[base + 3] = 0b00000001; // attribute 31 set (bottom bit of fourth byte)
+    mockStory[base + 4] = 68; // parent
+    mockStory[base + 5] = 239; // sibling
+    mockStory[base + 6] = 21; // child
+    mockStory[base + 7] = 0x2b;
+    mockStory[base + 8] = 0x53; // propertyTableAddress = 0x2b53
+
+    const entry = readObjectEntry(mockStory, 0x00, 1, 3);
+
+    expect(entry.attributes[0]).toBe(true);
+    expect(entry.attributes[31]).toBe(true);
+    expect(entry.attributes[1]).toBe(false);
+    expect(entry.parent).toBe(68);
+    expect(entry.sibling).toBe(239);
+    expect(entry.child).toBe(21);
+    expect(entry.propertyTableAddress).toBe(0x2b53);
+  });
+
+  test("reads a V5 (14-byte) entry with word-sized parent/sibling/child", () => {
+    const mockStory = new Uint8Array(28);
+    const base = 0x00;
+
+    mockStory[base + 6] = 0x00;
+    mockStory[base + 7] = 100; // parent = 100
+    mockStory[base + 8] = 0x00;
+    mockStory[base + 9] = 200; // sibling = 200
+    mockStory[base + 10] = 0x00;
+    mockStory[base + 11] = 50; // child = 50
+    mockStory[base + 12] = 0x10;
+    mockStory[base + 13] = 0x00; // propertyTableAddress = 0x1000
+
+    const entry = readObjectEntry(mockStory, 0x00, 1, 5);
+
+    expect(entry.attributes.length).toBe(48);
+    expect(entry.parent).toBe(100);
+    expect(entry.sibling).toBe(200);
+    expect(entry.child).toBe(50);
+    expect(entry.propertyTableAddress).toBe(0x1000);
+  });
+});
+
+describe("countObjects", () => {
+  test("stops correctly when the next entry would collide with property data (V3)", () => {
+    const mockStory = new Uint8Array(30);
+    const base = 0x00;
+
+    // Object 1 (bytes 0-8): property pointer -> 18
+    mockStory[base + 7] = 0x00;
+    mockStory[base + 8] = 18;
+    // Object 2 (bytes 9-17): property pointer -> 18 (property data starts right after both entries)
+    mockStory[base + 16] = 0x00;
+    mockStory[base + 17] = 18;
+
+    const count = countObjects(mockStory, base, 3);
+    expect(count).toBe(2);
+  });
+
+  test("correctly identifies a single-object table (V3)", () => {
+    const mockStory = new Uint8Array(20);
+    const base = 0x00;
+
+    // Object 1 (bytes 0-8): property pointer -> 9 (immediately after this one entry)
+    mockStory[base + 7] = 0x00;
+    mockStory[base + 8] = 9;
+
+    const count = countObjects(mockStory, base, 3);
+    expect(count).toBe(1);
+  });
+
+  test("uses the MINIMUM property address seen, not just the last one (V3)", () => {
+    const mockStory = new Uint8Array(40);
+    const base = 0x00;
+
+    // Object 1: property pointer -> 30 (far away)
+    mockStory[base + 7] = 0x00;
+    mockStory[base + 8] = 30;
+    // Object 2: property pointer -> 18 (closer! this is the real boundary)
+    mockStory[base + 16] = 0x00;
+    mockStory[base + 17] = 18;
+
+    // A would-be object 3 would start at 18, which collides with the object 2's property table
+    const count = countObjects(mockStory, base, 3);
+    expect(count).toBe(2);
+  });
+});
+
+describe("readObjectTable", () => {
+  test("composes defaults, count, and all entries correctly (V3)", () => {
+    const mockStory = new Uint8Array(200);
+    const tableAddr = 0x00;
+
+    // property defaults table is 31 words (62 bytes); object entries start at 0x3E
+    const firstEntry = 0x3e;
+
+    // Object 1: property pointer -> firstEntry + 18 (i.e. right after 2 entries)
+    mockStory[firstEntry + 7] = 0x00;
+    mockStory[firstEntry + 8] = (firstEntry + 18) & 0xff;
+    // Object 2: property pointer -> same address (boundary)
+    mockStory[firstEntry + 16] = 0x00;
+    mockStory[firstEntry + 17] = (firstEntry + 18) & 0xff;
+
+    const result = readObjectTable(mockStory, tableAddr, 3, 0);
+
+    expect(result.defaults.length).toBe(31);
+    expect(result.objectCount).toBe(2);
+    expect(result.objects.length).toBe(2);
+    expect(result.objects[0]?.number).toBe(1);
+    expect(result.objects[1]?.number).toBe(2);
+  });
+});
+
+describe("readPropertyTableHeader", () => {
+  test("decodes a normal short name correctly", () => {
+    const mockStory = new Uint8Array(10);
+    const tableAddr = 0x00;
+
+    mockStory[tableAddr] = 1; // textLength = 1 word
+
+    // "the" -> [25, 13, 10], end-bit set (matches our earlier confirmed abbreviation)
+    const word = (1 << 15) | (25 << 10) | (13 << 5) | 10;
+    mockStory[tableAddr + 1] = (word >> 8) & 0xff;
+    mockStory[tableAddr + 2] = word & 0xff;
+
+    const result = readPropertyTableHeader(mockStory, tableAddr, 5, 0);
+
+    expect(result.textLength).toBe(1);
+    expect(result.shortName).toBe("the");
+    expect(result.propertiesStartAddress).toBe(tableAddr + 1 + 2); // 1 (length byte) + 1 word
+  });
+
+  test("correctly handles a zero-length (empty) short name without decoding garbage", () => {
+    const mockStory = new Uint8Array(10);
+    const tableAddr = 0x00;
+
+    mockStory[tableAddr] = 0; // textLength = 0, no string follows
+
+    const result = readPropertyTableHeader(mockStory, tableAddr, 5, 0);
+
+    expect(result.textLength).toBe(0);
+    expect(result.shortName).toBe("");
+    expect(result.propertiesStartAddress).toBe(tableAddr + 1); // properties start immediately, no name skipped
+  });
+});
+
+describe("readPropertyList", () => {
+  // prettier-ignore
+  test("parses a V3 property list, stopping at the terminator", () => {
+    // property 10, length 3 -> size byte = 32*(3-1)+10 = 74 = 0x4A
+    // property 2, length 1  -> size byte = 32*(1-1)+2  = 2  = 0x02
+    const mockStory = new Uint8Array(10);
+    let addr = 0;
+    mockStory[addr++] = 0x4a; mockStory[addr++] = 0x01; mockStory[addr++] = 0x02; mockStory[addr++] = 0x03;
+    mockStory[addr++] = 0x02; mockStory[addr++] = 0xff;
+    mockStory[addr++] = 0x00; // terminator
+
+    const result = readPropertyList(mockStory, 0, 3);
+
+    expect(result).toEqual([
+      { number: 10, dataAddress: 1, length: 3 },
+      { number: 2, dataAddress: 5, length: 1 },
+    ]);
+});
+
+  // prettier-ignore
+  test("parses a V5 property list, mixing short and long forms — this reconstructs the Standard's own mailbox worked example (49, 46, 45, 44)", () => {
+    const mockStory = new Uint8Array(20);
+    let addr = 0;
+    
+    mockStory[addr++] = 0x71; mockStory[addr++] = 0x00; mockStory[addr++] = 0x0a; // prop 49, short, len 2
+    mockStory[addr++] = 0xee; mockStory[addr++] = 0xc4; mockStory[addr++] = 0x54; mockStory[addr++] = 0xbf; mockStory[addr++] = 0x4a; mockStory[addr++] = 0xc3; // prop 46, long, len 4
+    mockStory[addr++] = 0x6d; mockStory[addr++] = 0x3e; mockStory[addr++] = 0xc1; // prop 45, short, len 2
+    mockStory[addr++] = 0x6c; mockStory[addr++] = 0x5b; mockStory[addr++] = 0x1c; // prop 44, short, len 2
+    mockStory[addr++] = 0x00; // terminator
+
+    const result = readPropertyList(mockStory, 0, 5);
+
+    expect(result.map(p => p.number)).toEqual([49, 46, 45, 44]);
+    expect(result.map(p => p.length)).toEqual([2, 4, 2, 2]);
+  });
+});

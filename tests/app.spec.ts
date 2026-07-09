@@ -4,6 +4,7 @@ import {
   readObjectEntry,
   readObjectTable,
   readPropertyDefaultsTable,
+  readPropertyTableHeader,
 } from "../src/app.ts";
 
 describe("tautology", () => {
@@ -154,5 +155,38 @@ describe("readObjectTable", () => {
     expect(result.objects.length).toBe(2);
     expect(result.objects[0]?.number).toBe(1);
     expect(result.objects[1]?.number).toBe(2);
+  });
+});
+
+describe("readPropertyTableHeader", () => {
+  test("decodes a normal short name correctly", () => {
+    const mockStory = new Uint8Array(10);
+    const tableAddr = 0x00;
+
+    mockStory[tableAddr] = 1; // textLength = 1 word
+
+    // "the" -> [25, 13, 10], end-bit set (matches our earlier confirmed abbreviation)
+    const word = (1 << 15) | (25 << 10) | (13 << 5) | 10;
+    mockStory[tableAddr + 1] = (word >> 8) & 0xff;
+    mockStory[tableAddr + 2] = word & 0xff;
+
+    const result = readPropertyTableHeader(mockStory, tableAddr, 5, 0);
+
+    expect(result.textLength).toBe(1);
+    expect(result.shortName).toBe("the");
+    expect(result.propertiesStartAddress).toBe(tableAddr + 1 + 2); // 1 (length byte) + 1 word
+  });
+
+  test("correctly handles a zero-length (empty) short name without decoding garbage", () => {
+    const mockStory = new Uint8Array(10);
+    const tableAddr = 0x00;
+
+    mockStory[tableAddr] = 0; // textLength = 0, no string follows
+
+    const result = readPropertyTableHeader(mockStory, tableAddr, 5, 0);
+
+    expect(result.textLength).toBe(0);
+    expect(result.shortName).toBe("");
+    expect(result.propertiesStartAddress).toBe(tableAddr + 1); // properties start immediately, no name skipped
   });
 });

@@ -7,6 +7,12 @@ interface PropertyDefaultsTable {
   firstObjectEntryAddress: number;
 }
 
+interface PropertyTableHeader {
+  textLength: number; // number of 2-byte words
+  shortName: string; // decoded text, "" if textLength is 0
+  propertiesStartAddress: number;
+}
+
 interface ObjectEntry {
   number: number;
   attributes: boolean[]; // index 0 = attribute 0, reading topmost-bit-first per §12.3.1
@@ -41,6 +47,35 @@ export function readPropertyDefaultsTable(
   return {
     defaults,
     firstObjectEntryAddress: objectTableAddress + size * 2,
+  };
+}
+
+export function readPropertyTableHeader(
+  storyData: Uint8Array,
+  propertyTableAddress: number,
+  version: number,
+  abbreviationsTableAddress: number,
+): PropertyTableHeader {
+  const textLength = readByte(storyData, propertyTableAddress);
+  const nameAddress = propertyTableAddress + 1;
+
+  if (textLength === 0) {
+    return {
+      textLength: 0,
+      shortName: "",
+      propertiesStartAddress: nameAddress, // no text, properties begin immediately
+    };
+  }
+
+  const decoded = decodeZString(storyData, nameAddress, version, abbreviationsTableAddress);
+  const shortName = decoded.tokens
+    .map((t) => (t.type === "zscii" ? String.fromCharCode(t.value!) : ""))
+    .join("");
+
+  return {
+    textLength,
+    shortName,
+    propertiesStartAddress: nameAddress + textLength * 2, // skip past the declared word count
   };
 }
 
@@ -170,20 +205,38 @@ function main(): void {
   const objectCount = countObjects(storyData, propDefaults.firstObjectEntryAddress, version);
   console.log(`Object count: ${objectCount}`);
 
-  for (let i = 250; i <= 255; i++) {
-    const entry = readObjectEntry(storyData, propDefaults.firstObjectEntryAddress, i, version);
-    const nameAddr = entry.propertyTableAddress + 1;
-    const name = decodeZString(storyData, nameAddr, version, map.abbreviationsTableAddress);
-    console.log(
-      i,
-      name.tokens
-        .map((t) => (t.type === "zscii" ? String.fromCharCode(t.value!) : `[${t.type}]`))
-        .join(""),
-    );
-  }
+  // Naive propertyTableAddress + 1 peek (replaced below)
+  // for (let i = 250; i <= 255; i++) {
+  //   const entry = readObjectEntry(storyData, propDefaults.firstObjectEntryAddress, i, version);
+  //   const nameAddr = entry.propertyTableAddress + 1;
+  //   const name = decodeZString(storyData, nameAddr, version, map.abbreviationsTableAddress);
+  //   console.log(
+  //     i,
+  //     name.tokens
+  //       .map((t) => (t.type === "zscii" ? String.fromCharCode(t.value!) : `[${t.type}]`))
+  //       .join(""),
+  //   );
+  // }
 
   const table = readObjectTable(storyData, map.objectTableAddress, version);
   console.log(`Total objects: ${table.objectCount}`);
+
+  for (const num of [41, 82, 247, 23, 117]) {
+    const obj = table.objects[num - 1];
+
+    if (!obj) {
+      console.warn(`Object ${num} not found`);
+      continue;
+    }
+
+    const header = readPropertyTableHeader(
+      storyData,
+      obj.propertyTableAddress,
+      version,
+      map.abbreviationsTableAddress,
+    );
+    console.log(`${num}: "${header.shortName}" (textLength=${header.textLength})`);
+  }
 
   for (const obj of table.objects) {
     const nameAddr = obj.propertyTableAddress + 1;

@@ -1,5 +1,6 @@
 import { readMemoryMap, readVersion, type MemoryMap } from "./header.ts";
 import { loadStoryFile, readByte, readWord } from "./utils.ts";
+import { decodeZString } from "./zstring.ts";
 
 export interface DictionaryHeader {
   separatorCount: number;
@@ -8,6 +9,13 @@ export interface DictionaryHeader {
   entryCount: number; // signed: negative means "unsorted, |entryCount| entries"
   isSorted: boolean;
   firstEntryAddress: number;
+}
+
+export interface DictionaryEntry {
+  index: number;
+  address: number;
+  text: string;
+  data: number[];
 }
 
 export function readDictionaryHeader(
@@ -36,6 +44,41 @@ export function readDictionaryHeader(
   };
 }
 
+export function readDictionaryEntry(
+  storyData: Uint8Array,
+  header: DictionaryHeader,
+  index: number,
+  version: number,
+  abbreviationsTableAddress: number,
+): DictionaryEntry {
+  const address = header.firstEntryAddress + index * header.entryLength;
+  const textWidth = textByteWidth(version);
+  const expectedWords = textWidth / 2;
+
+  const decoded = decodeZString(storyData, address, version, abbreviationsTableAddress);
+
+  if (decoded.wordsConsumed !== expectedWords) {
+    console.warn(
+      `Dictionary entry ${index} at 0x${address.toString(16)}: expected ${expectedWords} words, got ${decoded.wordsConsumed}`,
+    );
+  }
+
+  const text = decoded.tokens
+    .map((t) => (t.type === "zscii" ? String.fromCharCode(t.value!) : `[${t.type}]`))
+    .join("");
+
+  const data: number[] = [];
+  for (let i = textWidth; i < header.entryLength; i++) {
+    data.push(readByte(storyData, address + i));
+  }
+
+  return { index, address, text, data };
+}
+
+function textByteWidth(version: number): number {
+  return version <= 3 ? 4 : 6;
+}
+
 function toSigned16(value: number): number {
   return value >= 0x8000 ? value - 0x10000 : value;
 }
@@ -57,6 +100,12 @@ function main(): void {
   const dictHeader = readDictionaryHeader(storyData, map.dictionaryAddress);
 
   console.log(dictHeader);
+
+  for (let i = 0; i < 10; i++) {
+    console.log(
+      readDictionaryEntry(storyData, dictHeader, i, version, map.abbreviationsTableAddress),
+    );
+  }
 }
 
 if (import.meta.main) {

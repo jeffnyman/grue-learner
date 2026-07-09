@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { readDictionaryHeader } from "../src/app.ts";
+import { readDictionaryEntry, readDictionaryHeader, type DictionaryHeader } from "../src/app.ts";
 
 describe("tautology", () => {
   test("reality still works", () => {
@@ -41,5 +41,61 @@ describe("readDictionaryHeader", () => {
 
     expect(result.entryCount).toBe(-5);
     expect(result.isSorted).toBe(false);
+  });
+});
+
+describe("readDictionaryEntry", () => {
+  test("decodes a V3 entry: text + 3 data bytes, confirming word count", () => {
+    const mockStory = new Uint8Array(20);
+    const header: DictionaryHeader = {
+      separatorCount: 0,
+      separators: [],
+      entryLength: 7,
+      entryCount: 1,
+      isSorted: true,
+      firstEntryAddress: 0,
+    };
+
+    // "the" as before: zchars [25,13,10], but needs exactly 2 words (4 bytes) for V3.
+    // word1: zchars 25,13,10, end-bit=0 (not yet done, need a 2nd word to hit 4 bytes)
+    const word1 = (0 << 15) | (25 << 10) | (13 << 5) | 10;
+    mockStory[0] = (word1 >> 8) & 0xff;
+    mockStory[1] = word1 & 0xff;
+    // word2: padding (zchar 5,5,5), end-bit=1
+    const word2 = (1 << 15) | (5 << 10) | (5 << 5) | 5;
+    mockStory[2] = (word2 >> 8) & 0xff;
+    mockStory[3] = word2 & 0xff;
+
+    // data bytes (entryLength 7 - textWidth 4 = 3 bytes)
+    mockStory[4] = 0x01;
+    mockStory[5] = 0x02;
+    mockStory[6] = 0x03;
+
+    const entry = readDictionaryEntry(mockStory, header, 0, 3, 0);
+
+    expect(entry.data).toEqual([0x01, 0x02, 0x03]);
+    expect(entry.address).toBe(0);
+  });
+
+  test("computes the correct address for a non-zero index", () => {
+    const mockStory = new Uint8Array(30);
+    const header: DictionaryHeader = {
+      separatorCount: 0,
+      separators: [],
+      entryLength: 7,
+      entryCount: 2,
+      isSorted: true,
+      firstEntryAddress: 0,
+    };
+
+    const address = 3 * 7; // 21
+
+    // Minimal valid terminated string: zchars [0,0,0], end-bit set
+    const word = (1 << 15) | (0 << 10) | (0 << 5) | 0;
+    mockStory[address] = (word >> 8) & 0xff;
+    mockStory[address + 1] = word & 0xff;
+
+    const entry = readDictionaryEntry(mockStory, header, 3, 3, 0);
+    expect(entry.address).toBe(address);
   });
 });

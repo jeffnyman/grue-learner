@@ -1,11 +1,17 @@
 import { readMemoryMap, readVersion, type MemoryMap } from "./header.ts";
-import { loadStoryFile, readByte } from "./utils.ts";
+import { loadStoryFile, readByte, readWord } from "./utils.ts";
 
 export type InstructionForm = "long" | "short" | "variable" | "extended";
 
 export type OperandCount = "0OP" | "1OP" | "2OP" | "VAR";
 
 export type OperandType = "large constant" | "small constant" | "variable" | "omitted";
+
+export interface DecodedOperand {
+  type: OperandType;
+  value: number; // raw encoded value: the literal for constants, the variable number for "variable"
+  bytesConsumed: number;
+}
 
 export function decodeOperandTypes(
   opcodeByte: number,
@@ -42,6 +48,22 @@ function twoBitToType(bits: number): OperandType {
   if (bits === 0b01) return "small constant";
   if (bits === 0b10) return "variable";
   return "omitted";
+}
+
+export function readOperand(
+  storyData: Uint8Array,
+  address: number,
+  type: OperandType,
+): DecodedOperand {
+  if (type === "large constant") {
+    return { type, value: readWord(storyData, address), bytesConsumed: 2 };
+  }
+
+  if (type === "small constant" || type === "variable") {
+    return { type, value: readByte(storyData, address), bytesConsumed: 1 };
+  }
+
+  throw new Error(`readOperand: cannot read an "omitted" operand`);
 }
 
 export function readOperandTypes(

@@ -4,6 +4,7 @@ import {
   decodeOperandCount,
   decodeOperandTypes,
   decodeVariableFormOperandTypes,
+  readOperand,
   readOperandTypes,
 } from "../src/app.ts";
 
@@ -326,5 +327,47 @@ describe("readOperandTypes — extended form", () => {
 
     const result = readOperandTypes(mockStory, 0xbe, opcodeAddress, "extended", "VAR");
     expect(result).toEqual([]);
+  });
+});
+
+describe("readOperand", () => {
+  test("reads a large constant as a 2-byte big-endian word", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x02] = 0x03;
+    mockStory[0x03] = 0xe8; // 0x03e8 = 1000
+
+    const result = readOperand(mockStory, 0x02, "large constant");
+    expect(result).toEqual({ type: "large constant", value: 1000, bytesConsumed: 2 });
+  });
+
+  test("reads a small constant as a single byte", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x05] = 42;
+
+    const result = readOperand(mockStory, 0x05, "small constant");
+    expect(result).toEqual({ type: "small constant", value: 42, bytesConsumed: 1 });
+  });
+
+  test("reads a variable operand as a raw variable number, not a resolved value", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x07] = 0x02; // variable number 2 (a local variable), not "the value of local 2"
+
+    const result = readOperand(mockStory, 0x07, "variable");
+    expect(result).toEqual({ type: "variable", value: 2, bytesConsumed: 1 });
+  });
+
+  test("throws when asked to read an omitted operand", () => {
+    const mockStory = new Uint8Array(10);
+    expect(() => readOperand(mockStory, 0x00, "omitted")).toThrow();
+  });
+
+  test("large constant read does not overrun into unrelated adjacent bytes", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0xff;
+    mockStory[0x01] = 0x00;
+    mockStory[0x02] = 0xff; // if bytesConsumed math were wrong, this could bleed in
+
+    const result = readOperand(mockStory, 0x00, "large constant");
+    expect(result).toEqual({ type: "large constant", value: 0xff00, bytesConsumed: 2 });
   });
 });

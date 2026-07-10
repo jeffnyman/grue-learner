@@ -5,6 +5,7 @@ import {
   decodeOperandCount,
   decodeOperandTypes,
   decodeVariableFormOperandTypes,
+  hasBranchByte,
   hasStoreByte,
   isDoubleVariableOpcode,
   readOpcodeNumber,
@@ -629,5 +630,35 @@ describe("readStoreByteIfPresent", () => {
 
     const result = readStoreByteIfPresent(mockStory, 0x07, "2OP", 20, 3); // add
     expect(result).toEqual({ variableNumber: 42, bytesConsumed: 1 });
+  });
+});
+
+describe("hasBranchByte", () => {
+  test("test_attr (2OP:10) branches", () => {
+    expect(hasBranchByte("2OP", 10, 3)).toBe(true);
+  });
+
+  test("jz (1OP:128) branches", () => {
+    expect(hasBranchByte("1OP", 128, 3)).toBe(true);
+  });
+
+  test("jump (1OP:140) does not branch, despite its name", () => {
+    expect(hasBranchByte("1OP", 140, 3)).toBe(false);
+  });
+
+  test("add (2OP:20) does not branch", () => {
+    expect(hasBranchByte("2OP", 20, 3)).toBe(false);
+  });
+
+  test("call (VAR:224) does not branch", () => {
+    expect(hasBranchByte("VAR", 224, 3)).toBe(false);
+  });
+
+  test("rfalse (0OP:177) does not branch", () => {
+    expect(hasBranchByte("0OP", 177, 3)).toBe(false);
+  });
+
+  test("throws for an opcode not yet in the seed table", () => {
+    expect(() => hasBranchByte("VAR", 231, 3)).toThrow();
   });
 });

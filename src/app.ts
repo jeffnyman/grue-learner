@@ -29,6 +29,32 @@ const storeByteTable: Record<string, StoreInfo> = {
   "0OP:187": false,                     // new_line — §14
 };
 
+// prettier-ignore
+const branchByteTable: Record<string, boolean> = {
+  // VAR
+  "VAR:224": false,  // call / call_vs — §14
+  "VAR:225": false,  // storew — §14
+  "VAR:227": false,  // put_prop — §14
+  "VAR:228": false,  // sread/aread — §14 (no ?(label) or branch marker in either V3 or V5 row)
+
+  // 2OP
+  "2OP:10": true,    // test_attr — §14, ?(label)
+  "2OP:13": false,   // store — §14
+  "2OP:14": false,   // insert_obj — §14
+  "2OP:16": false,   // loadb — §14
+  "2OP:20": false,   // add — §14
+
+  // 1OP
+  "1OP:128": true,   // jz — §14, ?(label)
+  "1OP:139": false,  // ret — §14/§15
+  "1OP:140": false,  // jump — §15, explicitly "not a branch instruction"
+
+  // 0OP
+  "0OP:177": false,  // rfalse — §14
+  "0OP:178": false,  // print — text argument, not branch — §4.8, §14
+  "0OP:187": false,  // new_line — §14
+};
+
 export type InstructionForm = "long" | "short" | "variable" | "extended";
 
 export type OperandCount = "0OP" | "1OP" | "2OP" | "VAR";
@@ -63,6 +89,23 @@ export function readStoreByteIfPresent(
   }
 
   return readStoreByte(storyData, address);
+}
+
+export function hasBranchByte(
+  category: OperandCount,
+  opcodeNumber: number,
+  _version: number,
+): boolean {
+  const key = `${category}:${opcodeNumber}`;
+  const entry = branchByteTable[key];
+
+  if (entry === undefined) {
+    throw new Error(
+      `hasBranchByte: opcode ${key} is not yet in the seed table — spec lookup needed`,
+    );
+  }
+
+  return entry;
 }
 
 export function hasStoreByte(

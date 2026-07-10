@@ -18,6 +18,18 @@ export interface ReadOperandsResult {
   totalBytesConsumed: number;
 }
 
+export interface StoreTarget {
+  variableNumber: number; // 0 = stack, 1-15 = local, 16-255 = global, per §4.2.2/§6.3
+  bytesConsumed: number;
+}
+
+export function readStoreByte(storyData: Uint8Array, address: number): StoreTarget {
+  return {
+    variableNumber: readByte(storyData, address),
+    bytesConsumed: 1,
+  };
+}
+
 export function decodeOperandTypes(
   opcodeByte: number,
   form: InstructionForm,

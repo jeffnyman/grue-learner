@@ -10,6 +10,7 @@ import {
   readOperand,
   readOperands,
   readOperandTypes,
+  readStoreByte,
   type OperandType,
 } from "../src/app.ts";
 
@@ -501,5 +502,40 @@ describe("isDoubleVariableOpcode (post-refactor)", () => {
 
   test("still correctly rejects an ordinary VAR opcode", () => {
     expect(isDoubleVariableOpcode(0xe0)).toBe(false); // opcode 0
+  });
+});
+
+describe("readStoreByte", () => {
+  test("reads variable number 0 (the stack)", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0x00;
+
+    const result = readStoreByte(mockStory, 0x00);
+    expect(result).toEqual({ variableNumber: 0, bytesConsumed: 1 });
+  });
+
+  test("reads a local variable number (1-15)", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0x05;
+
+    const result = readStoreByte(mockStory, 0x00);
+    expect(result).toEqual({ variableNumber: 5, bytesConsumed: 1 });
+  });
+
+  test("reads a global variable number (16-255)", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0x10; // 16, the first global
+
+    const result = readStoreByte(mockStory, 0x00);
+    expect(result).toEqual({ variableNumber: 16, bytesConsumed: 1 });
+  });
+
+  test("reads at a nonzero address, not always address 0", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0xff; // poison — should not be read
+    mockStory[0x06] = 42;
+
+    const result = readStoreByte(mockStory, 0x06);
+    expect(result).toEqual({ variableNumber: 42, bytesConsumed: 1 });
   });
 });

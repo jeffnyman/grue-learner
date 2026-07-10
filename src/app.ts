@@ -3,6 +3,22 @@ import { loadStoryFile } from "./utils.ts";
 
 export type InstructionForm = "long" | "short" | "variable" | "extended";
 
+export type OperandCount = "0OP" | "1OP" | "2OP" | "VAR";
+
+export function decodeOperandCount(opcodeByte: number, form: InstructionForm): OperandCount {
+  if (form === "long") return "2OP";
+  if (form === "extended") return "VAR";
+
+  if (form === "short") {
+    const typeBits = (opcodeByte >> 4) & 0b11; // bits 4-5
+    return typeBits === 0b11 ? "0OP" : "1OP";
+  }
+
+  // variable form
+  const bit5 = (opcodeByte >> 5) & 0b1;
+  return bit5 === 0b1 ? "VAR" : "2OP";
+}
+
 export function decodeForm(opcodeByte: number, version: number): InstructionForm {
   if (opcodeByte === 0xbe && version >= 5) {
     return "extended";

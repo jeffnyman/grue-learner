@@ -39,6 +39,22 @@ function twoBitToType(bits: number): OperandType {
   return "omitted";
 }
 
+export function decodeVariableFormOperandTypes(typeByte: number): OperandType[] {
+  const types: OperandType[] = [];
+
+  for (let fieldIndex = 0; fieldIndex < 4; fieldIndex++) {
+    const shift = 6 - fieldIndex * 2; // 6, 4, 2, 0
+    const bits = (typeByte >> shift) & 0b11;
+    const type = twoBitToType(bits);
+
+    if (type === "omitted") break;
+
+    types.push(type);
+  }
+
+  return types;
+}
+
 export function decodeOperandCount(opcodeByte: number, form: InstructionForm): OperandCount {
   if (form === "long") return "2OP";
   if (form === "extended") return "VAR";

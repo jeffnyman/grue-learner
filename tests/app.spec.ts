@@ -1,5 +1,10 @@
 import { describe, test, expect } from "vitest";
-import { decodeForm, decodeOperandCount, decodeOperandTypes } from "../src/app.ts";
+import {
+  decodeForm,
+  decodeOperandCount,
+  decodeOperandTypes,
+  decodeVariableFormOperandTypes,
+} from "../src/app.ts";
 
 describe("tautology", () => {
   test("reality still works", () => {
@@ -120,5 +125,56 @@ describe("decodeOperandTypes", () => {
     test("throws for extended form (not yet implemented)", () => {
       expect(() => decodeOperandTypes(0xbe, "extended", "VAR")).toThrow();
     });
+  });
+});
+
+describe("decodeVariableFormOperandTypes", () => {
+  test("all four fields present, mixed types", () => {
+    // %00 01 10 01 → large constant, small constant, variable, small constant
+    const typeByte = 0b00011001;
+    expect(decodeVariableFormOperandTypes(typeByte)).toEqual([
+      "large constant",
+      "small constant",
+      "variable",
+      "small constant",
+    ]);
+  });
+
+  test("all four fields omitted yields no operands", () => {
+    const typeByte = 0b11111111;
+    expect(decodeVariableFormOperandTypes(typeByte)).toEqual([]);
+  });
+
+  test("stops at first omitted field (one operand)", () => {
+    // %10 11 11 11 → variable, then omitted stops reading
+    const typeByte = 0b10111111;
+    expect(decodeVariableFormOperandTypes(typeByte)).toEqual(["variable"]);
+  });
+
+  test("stops at first omitted field (two operands)", () => {
+    // %01 00 11 11 → small constant, large constant, then omitted stops reading
+    const typeByte = 0b01001111;
+    expect(decodeVariableFormOperandTypes(typeByte)).toEqual(["small constant", "large constant"]);
+  });
+
+  test("stops at first omitted field (three operands)", () => {
+    // %10 10 01 11 → variable, variable, small constant, then omitted stops reading
+    const typeByte = 0b10100111;
+    expect(decodeVariableFormOperandTypes(typeByte)).toEqual([
+      "variable",
+      "variable",
+      "small constant",
+    ]);
+  });
+
+  test("large constant field decodes correctly in each position", () => {
+    // %00 00 00 00 → four large constants
+    const typeByte = 0b00000000;
+    expect(decodeVariableFormOperandTypes(typeByte)).toEqual([
+      "large constant",
+      "large constant",
+      "large constant",
+      "large constant",
+    ]);
   });
 });

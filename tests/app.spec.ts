@@ -7,6 +7,7 @@ import {
   decodeVariableFormOperandTypes,
   hasBranchByte,
   hasStoreByte,
+  interpretBranch,
   isDoubleVariableOpcode,
   readOpcodeNumber,
   readOperand,
@@ -16,6 +17,7 @@ import {
   readStoreByte,
   readStoreByteIfPresent,
   type OperandType,
+  type RawBranchInfo,
 } from "../src/app.ts";
 
 describe("tautology", () => {
@@ -722,5 +724,48 @@ describe("readRawBranchInfo", () => {
 
     const result = readRawBranchInfo(mockStory, 0x00);
     expect(result).toEqual({ senseBit: false, offset: 8191, bytesConsumed: 2 });
+  });
+});
+
+describe("interpretBranch", () => {
+  test("offset 0 means return false, regardless of sense or address", () => {
+    const branchInfo: RawBranchInfo = { senseBit: true, offset: 0, bytesConsumed: 1 };
+    expect(interpretBranch(branchInfo, 0x5000)).toEqual({ kind: "returnFalse" });
+  });
+
+  test("offset 1 means return true, regardless of sense or address", () => {
+    const branchInfo: RawBranchInfo = { senseBit: false, offset: 1, bytesConsumed: 2 };
+    expect(interpretBranch(branchInfo, 0x5000)).toEqual({ kind: "returnTrue" });
+  });
+
+  test("a real forward jump computes the correct target address (1-byte form)", () => {
+    // Matches the spec's own worked example: inc_chk c 0 label, offset 20, label 18 bytes forward
+    const branchInfo: RawBranchInfo = { senseBit: true, offset: 20, bytesConsumed: 1 };
+    const branchStartAddress = 0x1000;
+    // address after branch data = 0x1001; target = 0x1001 + 20 - 2 = 0x1013
+    expect(interpretBranch(branchInfo, branchStartAddress)).toEqual({
+      kind: "jump",
+      targetAddress: 0x1013,
+    });
+  });
+
+  test("a real jump using the 2-byte form's larger bytesConsumed", () => {
+    const branchInfo: RawBranchInfo = { senseBit: false, offset: 100, bytesConsumed: 2 };
+    const branchStartAddress = 0x2000;
+    // address after branch data = 0x2002; target = 0x2002 + 100 - 2 = 0x2064
+    expect(interpretBranch(branchInfo, branchStartAddress)).toEqual({
+      kind: "jump",
+      targetAddress: 0x2064,
+    });
+  });
+
+  test("a negative offset computes a backward jump target", () => {
+    const branchInfo: RawBranchInfo = { senseBit: true, offset: -10, bytesConsumed: 2 };
+    const branchStartAddress = 0x3000;
+    // address after branch data = 0x3002; target = 0x3002 + (-10) - 2 = 0x2ff6
+    expect(interpretBranch(branchInfo, branchStartAddress)).toEqual({
+      kind: "jump",
+      targetAddress: 0x2ff6,
+    });
   });
 });

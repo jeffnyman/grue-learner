@@ -3,6 +3,11 @@ import { loadStoryFile, readByte, readWord } from "./utils.ts";
 
 type StoreInfo = boolean | { storesFromVersion: number };
 
+export type BranchOutcome =
+  | { kind: "returnFalse" }
+  | { kind: "returnTrue" }
+  | { kind: "jump"; targetAddress: number };
+
 // prettier-ignore
 const storeByteTable: Record<string, StoreInfo> = {
   // VAR
@@ -81,6 +86,24 @@ export interface RawBranchInfo {
   senseBit: boolean; // true = branch on true, false = branch on false
   offset: number; // 0-63 for 1-byte form; signed for 2-byte form
   bytesConsumed: 1 | 2;
+}
+
+export function interpretBranch(
+  branchInfo: RawBranchInfo,
+  branchStartAddress: number,
+): BranchOutcome {
+  if (branchInfo.offset === 0) {
+    return { kind: "returnFalse" };
+  }
+
+  if (branchInfo.offset === 1) {
+    return { kind: "returnTrue" };
+  }
+
+  const addressAfterBranchData = branchStartAddress + branchInfo.bytesConsumed;
+  const targetAddress = addressAfterBranchData + branchInfo.offset - 2;
+
+  return { kind: "jump", targetAddress };
 }
 
 export function readStoreByteIfPresent(

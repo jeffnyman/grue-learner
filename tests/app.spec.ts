@@ -4,6 +4,7 @@ import {
   decodeOperandCount,
   decodeOperandTypes,
   decodeVariableFormOperandTypes,
+  readOperandTypes,
 } from "../src/app.ts";
 
 describe("tautology", () => {
@@ -176,5 +177,51 @@ describe("decodeVariableFormOperandTypes", () => {
       "large constant",
       "large constant",
     ]);
+  });
+});
+
+describe("readOperandTypes", () => {
+  test("delegates to decodeOperandTypes for long form (no memory read)", () => {
+    const mockStory = new Uint8Array(10); // deliberately empty/zeroed
+    const opcodeByte = 0x05; // long form, both bits 0
+    const result = readOperandTypes(mockStory, opcodeByte, 0x00, "long", "2OP");
+    expect(result).toEqual(["small constant", "small constant"]);
+  });
+
+  test("delegates to decodeOperandTypes for short form (no memory read)", () => {
+    const mockStory = new Uint8Array(10);
+    const opcodeByte = 0x8f; // short form, 1OP, large constant
+    const result = readOperandTypes(mockStory, opcodeByte, 0x00, "short", "1OP");
+    expect(result).toEqual(["large constant"]);
+  });
+
+  test("reads the type byte immediately after the opcode for variable form", () => {
+    const mockStory = new Uint8Array(10);
+    const opcodeAddress = 0x02;
+    mockStory[opcodeAddress] = 0xe0; // the opcode byte itself, irrelevant to type decoding here
+    mockStory[opcodeAddress + 1] = 0b01101111; // small constant, variable, then omitted (%11) stops reading
+
+    const result = readOperandTypes(mockStory, 0xe0, opcodeAddress, "variable", "VAR");
+    expect(result).toEqual(["small constant", "variable"]);
+  });
+
+  test("variable form reads type byte at the correct offset, not address 0", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0] = 0b11111111; // if this were read by mistake, we'd get []
+    const opcodeAddress = 0x05;
+    mockStory[opcodeAddress + 1] = 0b00000000; // four large constants
+
+    const result = readOperandTypes(mockStory, 0xe0, opcodeAddress, "variable", "VAR");
+    expect(result).toEqual([
+      "large constant",
+      "large constant",
+      "large constant",
+      "large constant",
+    ]);
+  });
+
+  test("throws for extended form (not yet implemented)", () => {
+    const mockStory = new Uint8Array(10);
+    expect(() => readOperandTypes(mockStory, 0xbe, 0x00, "extended", "VAR")).toThrow();
   });
 });

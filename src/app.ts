@@ -1,5 +1,5 @@
 import { readMemoryMap, readVersion, type MemoryMap } from "./header.ts";
-import { loadStoryFile } from "./utils.ts";
+import { loadStoryFile, readByte } from "./utils.ts";
 
 export type InstructionForm = "long" | "short" | "variable" | "extended";
 
@@ -37,6 +37,25 @@ function twoBitToType(bits: number): OperandType {
   if (bits === 0b01) return "small constant";
   if (bits === 0b10) return "variable";
   return "omitted";
+}
+
+export function readOperandTypes(
+  storyData: Uint8Array,
+  opcodeByte: number,
+  opcodeAddress: number,
+  form: InstructionForm,
+  operandCount: OperandCount,
+): OperandType[] {
+  if (form === "long" || form === "short") {
+    return decodeOperandTypes(opcodeByte, form, operandCount);
+  }
+
+  if (form === "variable") {
+    const typeByte = readByte(storyData, opcodeAddress + 1);
+    return decodeVariableFormOperandTypes(typeByte);
+  }
+
+  throw new Error(`readOperandTypes: ${form} form not yet supported`);
 }
 
 export function decodeVariableFormOperandTypes(typeByte: number): OperandType[] {

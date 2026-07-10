@@ -1,6 +1,34 @@
 import { readMemoryMap, readVersion, type MemoryMap } from "./header.ts";
 import { loadStoryFile, readByte, readWord } from "./utils.ts";
 
+type StoreInfo = boolean | { storesFromVersion: number };
+
+// prettier-ignore
+const storeByteTable: Record<string, StoreInfo> = {
+  // VAR
+  "VAR:224": true,                      // call / call_vs — §14
+  "VAR:225": false,                     // storew — §14
+  "VAR:227": false,                     // put_prop — §14
+  "VAR:228": { storesFromVersion: 5 },  // sread (V3/V4, no store) → aread (V5+, stores) — §14
+
+  // 2OP
+  "2OP:10": false,                      // test_attr — branches, does not store — §14
+  "2OP:13": false,                      // store — writes via operand, not a store byte — §14
+  "2OP:14": false,                      // insert_obj — §14
+  "2OP:16": true,                       // loadb — §14
+  "2OP:20": true,                       // add — §14
+
+  // 1OP
+  "1OP:128": false,                     // jz — branches, does not store — §14
+  "1OP:139": false,                     // ret — §14/§15
+  "1OP:140": false,                     // jump — not a branch instruction either — §15
+
+  // 0OP
+  "0OP:177": false,                     // rfalse — §14
+  "0OP:178": false,                     // print — text argument, not a store — §4.8, §14
+  "0OP:187": false,                     // new_line — §14
+};
+
 export type InstructionForm = "long" | "short" | "variable" | "extended";
 
 export type OperandCount = "0OP" | "1OP" | "2OP" | "VAR";
@@ -21,6 +49,27 @@ export interface ReadOperandsResult {
 export interface StoreTarget {
   variableNumber: number; // 0 = stack, 1-15 = local, 16-255 = global, per §4.2.2/§6.3
   bytesConsumed: number;
+}
+
+export function hasStoreByte(
+  category: OperandCount,
+  opcodeNumber: number,
+  version: number,
+): boolean {
+  const key = `${category}:${opcodeNumber}`;
+  const entry = storeByteTable[key];
+
+  if (entry === undefined) {
+    throw new Error(
+      `hasStoreByte: opcode ${key} is not yet in the seed table — spec lookup needed`,
+    );
+  }
+
+  if (typeof entry === "boolean") {
+    return entry;
+  }
+
+  return version >= entry.storesFromVersion;
 }
 
 export function readStoreByte(storyData: Uint8Array, address: number): StoreTarget {

@@ -5,6 +5,7 @@ import {
   decodeOperandCount,
   decodeOperandTypes,
   decodeVariableFormOperandTypes,
+  hasStoreByte,
   isDoubleVariableOpcode,
   readOpcodeNumber,
   readOperand,
@@ -537,5 +538,52 @@ describe("readStoreByte", () => {
 
     const result = readStoreByte(mockStory, 0x06);
     expect(result).toEqual({ variableNumber: 42, bytesConsumed: 1 });
+  });
+});
+
+describe("hasStoreByte", () => {
+  test("call (VAR:224) stores", () => {
+    expect(hasStoreByte("VAR", 224, 3)).toBe(true);
+  });
+
+  test("storew (VAR:225) does not store", () => {
+    expect(hasStoreByte("VAR", 225, 3)).toBe(false);
+  });
+
+  test("add (2OP:20) stores", () => {
+    expect(hasStoreByte("2OP", 20, 3)).toBe(true);
+  });
+
+  test("test_attr (2OP:10) does not store (it branches instead)", () => {
+    expect(hasStoreByte("2OP", 10, 3)).toBe(false);
+  });
+
+  test("store (2OP:13) does not store via a store byte", () => {
+    expect(hasStoreByte("2OP", 13, 3)).toBe(false);
+  });
+
+  test("jz (1OP:128) does not store", () => {
+    expect(hasStoreByte("1OP", 128, 3)).toBe(false);
+  });
+
+  test("rfalse (0OP:177) does not store", () => {
+    expect(hasStoreByte("0OP", 177, 3)).toBe(false);
+  });
+
+  test("sread (VAR:228) does not store in V3", () => {
+    expect(hasStoreByte("VAR", 228, 3)).toBe(false);
+  });
+
+  test("sread (VAR:228) does not store in V4 either", () => {
+    expect(hasStoreByte("VAR", 228, 4)).toBe(false);
+  });
+
+  test("aread (VAR:228) stores from V5 onward", () => {
+    expect(hasStoreByte("VAR", 228, 5)).toBe(true);
+    expect(hasStoreByte("VAR", 228, 8)).toBe(true);
+  });
+
+  test("throws for an opcode not yet in the seed table", () => {
+    expect(() => hasStoreByte("VAR", 231, 3)).toThrow(); // random — not seeded yet
   });
 });

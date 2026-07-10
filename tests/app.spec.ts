@@ -12,6 +12,7 @@ import {
   readOperands,
   readOperandTypes,
   readStoreByte,
+  readStoreByteIfPresent,
   type OperandType,
 } from "../src/app.ts";
 
@@ -585,5 +586,48 @@ describe("hasStoreByte", () => {
 
   test("throws for an opcode not yet in the seed table", () => {
     expect(() => hasStoreByte("VAR", 231, 3)).toThrow(); // random — not seeded yet
+  });
+});
+
+describe("readStoreByteIfPresent", () => {
+  test("returns the store target when the opcode stores (call, VAR:224)", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0x00; // store to the stack
+
+    const result = readStoreByteIfPresent(mockStory, 0x00, "VAR", 224, 3);
+    expect(result).toEqual({ variableNumber: 0, bytesConsumed: 1 });
+  });
+
+  test("returns null when the opcode does not store (storew, VAR:225)", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0xff; // poison — should never be read
+
+    const result = readStoreByteIfPresent(mockStory, 0x00, "VAR", 225, 3);
+    expect(result).toBeNull();
+  });
+
+  test("respects the version boundary for sread/aread (VAR:228)", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0x10; // would be global 16, if read
+
+    expect(readStoreByteIfPresent(mockStory, 0x00, "VAR", 228, 4)).toBeNull();
+    expect(readStoreByteIfPresent(mockStory, 0x00, "VAR", 228, 5)).toEqual({
+      variableNumber: 16,
+      bytesConsumed: 1,
+    });
+  });
+
+  test("propagates the throw for an opcode not yet in the seed table", () => {
+    const mockStory = new Uint8Array(10);
+    expect(() => readStoreByteIfPresent(mockStory, 0x00, "VAR", 231, 3)).toThrow();
+  });
+
+  test("reads at the given address, not always address 0", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0xff; // poison
+    mockStory[0x07] = 42;
+
+    const result = readStoreByteIfPresent(mockStory, 0x07, "2OP", 20, 3); // add
+    expect(result).toEqual({ variableNumber: 42, bytesConsumed: 1 });
   });
 });

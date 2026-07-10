@@ -51,6 +51,20 @@ export interface StoreTarget {
   bytesConsumed: number;
 }
 
+export function readStoreByteIfPresent(
+  storyData: Uint8Array,
+  address: number,
+  category: OperandCount,
+  opcodeNumber: number,
+  version: number,
+): StoreTarget | null {
+  if (!hasStoreByte(category, opcodeNumber, version)) {
+    return null;
+  }
+
+  return readStoreByte(storyData, address);
+}
+
 export function hasStoreByte(
   category: OperandCount,
   opcodeNumber: number,

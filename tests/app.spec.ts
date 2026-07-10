@@ -225,3 +225,71 @@ describe("readOperandTypes", () => {
     expect(() => readOperandTypes(mockStory, 0xbe, 0x00, "extended", "VAR")).toThrow();
   });
 });
+
+describe("readOperandTypes — double-variable opcodes", () => {
+  test("call_vs2 (opcode 12) reads a second type byte when first is full", () => {
+    const mockStory = new Uint8Array(10);
+    const opcodeAddress = 0x00;
+    const opcodeByte = 0b11101100; // variable form, VAR count, opcode number 12 (call_vs2)
+    mockStory[opcodeAddress] = opcodeByte;
+    mockStory[opcodeAddress + 1] = 0b00011000; // large constant, small constant, variable, large constant (4 present)
+    mockStory[opcodeAddress + 2] = 0b01101111; // small constant, variable, then omitted
+
+    const result = readOperandTypes(mockStory, opcodeByte, opcodeAddress, "variable", "VAR");
+    expect(result).toEqual([
+      "large constant",
+      "small constant",
+      "variable",
+      "large constant",
+      "small constant",
+      "variable",
+    ]);
+  });
+
+  test("call_vn2 (opcode 26) also triggers the second type byte", () => {
+    const mockStory = new Uint8Array(10);
+    const opcodeAddress = 0x00;
+    const opcodeByte = 0b11111010; // variable form, VAR count, opcode number 26 (call_vn2)
+    mockStory[opcodeAddress] = opcodeByte;
+    mockStory[opcodeAddress + 1] = 0b00000000; // four large constants (all present)
+    mockStory[opcodeAddress + 2] = 0b11111111; // all omitted → zero more operands
+
+    const result = readOperandTypes(mockStory, opcodeByte, opcodeAddress, "variable", "VAR");
+    expect(result).toEqual([
+      "large constant",
+      "large constant",
+      "large constant",
+      "large constant",
+    ]);
+  });
+
+  test("call_vs2 with fewer than 4 operands does NOT read a second type byte", () => {
+    const mockStory = new Uint8Array(10);
+    const opcodeAddress = 0x00;
+    const opcodeByte = 0b11101100; // call_vs2
+    mockStory[opcodeAddress] = opcodeByte;
+    mockStory[opcodeAddress + 1] = 0b10111111; // variable, then omitted (only 1 operand)
+    mockStory[opcodeAddress + 2] = 0xff; // poison byte — if read, would still yield [] anyway,
+    // so this test alone doesn't prove non-reading; see next test for that.
+
+    const result = readOperandTypes(mockStory, opcodeByte, opcodeAddress, "variable", "VAR");
+    expect(result).toEqual(["variable"]);
+  });
+
+  test("an ordinary VAR opcode (not 12 or 26) never reads a second type byte, even if first is full", () => {
+    const mockStory = new Uint8Array(10);
+    const opcodeAddress = 0x00;
+    const opcodeByte = 0xe0; // opcode number 0 — not call_vs2/call_vn2
+    mockStory[opcodeAddress] = opcodeByte;
+    mockStory[opcodeAddress + 1] = 0b00000000; // four large constants, all present
+    mockStory[opcodeAddress + 2] = 0b01010101; // if wrongly read: small constant x4 — would fail the test below
+
+    const result = readOperandTypes(mockStory, opcodeByte, opcodeAddress, "variable", "VAR");
+    expect(result).toEqual([
+      "large constant",
+      "large constant",
+      "large constant",
+      "large constant",
+    ]);
+  });
+});

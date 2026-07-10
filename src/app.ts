@@ -28,6 +28,11 @@ export function decodeOperandTypes(
   throw new Error(`decodeOperandTypes: ${form} form not yet supported`);
 }
 
+function isDoubleVariableOpcode(opcodeByte: number): boolean {
+  const opcodeNumber = opcodeByte & 0b00011111; // bottom 5 bits, per §4.3.3
+  return opcodeNumber === 12 || opcodeNumber === 26; // call_vs2, call_vn2
+}
+
 function longFormBitToType(bit: number): OperandType {
   return bit === 0 ? "small constant" : "variable";
 }
@@ -52,7 +57,15 @@ export function readOperandTypes(
 
   if (form === "variable") {
     const typeByte = readByte(storyData, opcodeAddress + 1);
-    return decodeVariableFormOperandTypes(typeByte);
+    const types = decodeVariableFormOperandTypes(typeByte);
+
+    if (isDoubleVariableOpcode(opcodeByte) && types.length === 4) {
+      const secondTypeByte = readByte(storyData, opcodeAddress + 2);
+      const secondTypes = decodeVariableFormOperandTypes(secondTypeByte);
+      return [...types, ...secondTypes];
+    }
+
+    return types;
   }
 
   throw new Error(`readOperandTypes: ${form} form not yet supported`);

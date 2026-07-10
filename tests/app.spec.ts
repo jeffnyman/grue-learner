@@ -12,6 +12,7 @@ import {
   readOperand,
   readOperands,
   readOperandTypes,
+  readRawBranchInfo,
   readStoreByte,
   readStoreByteIfPresent,
   type OperandType,
@@ -660,5 +661,66 @@ describe("hasBranchByte", () => {
 
   test("throws for an opcode not yet in the seed table", () => {
     expect(() => hasBranchByte("VAR", 231, 3)).toThrow();
+  });
+});
+
+describe("readRawBranchInfo", () => {
+  test("1-byte form, branch on false, offset 20", () => {
+    const mockStory = new Uint8Array(10);
+    // bit7=0 (false), bit6=1 (1-byte form), offset 20 = 0b010100
+    mockStory[0x00] = 0b01010100;
+
+    const result = readRawBranchInfo(mockStory, 0x00);
+    expect(result).toEqual({ senseBit: false, offset: 20, bytesConsumed: 1 });
+  });
+
+  test("1-byte form, branch on true, offset 63 (max)", () => {
+    const mockStory = new Uint8Array(10);
+    // bit7=1 (true), bit6=1 (1-byte form), offset 63 = 0b111111
+    mockStory[0x00] = 0b11111111;
+
+    const result = readRawBranchInfo(mockStory, 0x00);
+    expect(result).toEqual({ senseBit: true, offset: 63, bytesConsumed: 1 });
+  });
+
+  test("2-byte form, branch on true, small positive offset", () => {
+    const mockStory = new Uint8Array(10);
+    // bit7=1 (true), bit6=0 (2-byte form), high6=0b000000, low byte=0x0a → offset 10
+    mockStory[0x00] = 0b10000000;
+    mockStory[0x01] = 0x0a;
+
+    const result = readRawBranchInfo(mockStory, 0x00);
+    expect(result).toEqual({ senseBit: true, offset: 10, bytesConsumed: 2 });
+  });
+
+  test("2-byte form, branch on false, negative offset via sign extension", () => {
+    const mockStory = new Uint8Array(10);
+    // bit7=0 (false), bit6=0 (2-byte form), high6=0b111111, low byte=0xff
+    // unsigned 14-bit = 0b11111111111111 = 16383 → signed = 16383 - 16384 = -1
+    mockStory[0x00] = 0b00111111;
+    mockStory[0x01] = 0xff;
+
+    const result = readRawBranchInfo(mockStory, 0x00);
+    expect(result).toEqual({ senseBit: false, offset: -1, bytesConsumed: 2 });
+  });
+
+  test("2-byte form, exactly at the sign boundary (8192 → most negative)", () => {
+    const mockStory = new Uint8Array(10);
+    // high6=0b100000 (0x20), low byte=0x00 → unsigned 0b10000000000000 = 8192 → signed = -8192
+    mockStory[0x00] = 0b00100000;
+    mockStory[0x01] = 0x00;
+
+    const result = readRawBranchInfo(mockStory, 0x00);
+    expect(result).toEqual({ senseBit: false, offset: -8192, bytesConsumed: 2 });
+  });
+
+  test("2-byte form, just below the sign boundary (8191 → still positive)", () => {
+    const mockStory = new Uint8Array(10);
+    // high6=0b011111 (0x1f), low byte=0xff → unsigned 0b01111111111111 = 8191 → signed = 8191
+    mockStory[0x00] = 0b00011111;
+    mockStory[0x01] = 0xff;
+
+    const result = readRawBranchInfo(mockStory, 0x00);
+    expect(result).toEqual({ senseBit: false, offset: 8191, bytesConsumed: 2 });
   });
 });

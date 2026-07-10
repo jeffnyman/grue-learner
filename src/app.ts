@@ -77,6 +77,12 @@ export interface StoreTarget {
   bytesConsumed: number;
 }
 
+export interface RawBranchInfo {
+  senseBit: boolean; // true = branch on true, false = branch on false
+  offset: number; // 0-63 for 1-byte form; signed for 2-byte form
+  bytesConsumed: 1 | 2;
+}
+
 export function readStoreByteIfPresent(
   storyData: Uint8Array,
   address: number,
@@ -89,6 +95,25 @@ export function readStoreByteIfPresent(
   }
 
   return readStoreByte(storyData, address);
+}
+
+export function readRawBranchInfo(storyData: Uint8Array, address: number): RawBranchInfo {
+  const firstByte = readByte(storyData, address);
+  const senseBit = (firstByte & 0b10000000) !== 0;
+  const isOneByteForm = (firstByte & 0b01000000) !== 0;
+
+  if (isOneByteForm) {
+    const offset = firstByte & 0b00111111; // bottom 6 bits, unsigned 0-63
+    return { senseBit, offset, bytesConsumed: 1 };
+  }
+
+  const secondByte = readByte(storyData, address + 1);
+  const highSixBits = firstByte & 0b00111111;
+  const unsignedFourteenBit = (highSixBits << 8) | secondByte; // 0-16383
+
+  const offset = unsignedFourteenBit >= 8192 ? unsignedFourteenBit - 16384 : unsignedFourteenBit;
+
+  return { senseBit, offset, bytesConsumed: 2 };
 }
 
 export function hasBranchByte(

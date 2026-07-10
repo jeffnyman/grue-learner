@@ -13,6 +13,11 @@ export interface DecodedOperand {
   bytesConsumed: number;
 }
 
+export interface ReadOperandsResult {
+  operands: DecodedOperand[];
+  totalBytesConsumed: number;
+}
+
 export function decodeOperandTypes(
   opcodeByte: number,
   form: InstructionForm,
@@ -48,6 +53,26 @@ function twoBitToType(bits: number): OperandType {
   if (bits === 0b01) return "small constant";
   if (bits === 0b10) return "variable";
   return "omitted";
+}
+
+export function readOperands(
+  storyData: Uint8Array,
+  startAddress: number,
+  types: OperandType[],
+): ReadOperandsResult {
+  const operands: DecodedOperand[] = [];
+  let currentAddress = startAddress;
+
+  for (const type of types) {
+    const operand = readOperand(storyData, currentAddress, type);
+    operands.push(operand);
+    currentAddress += operand.bytesConsumed;
+  }
+
+  return {
+    operands,
+    totalBytesConsumed: currentAddress - startAddress,
+  };
 }
 
 export function readOperand(

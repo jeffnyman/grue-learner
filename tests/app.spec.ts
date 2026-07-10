@@ -5,7 +5,9 @@ import {
   decodeOperandTypes,
   decodeVariableFormOperandTypes,
   readOperand,
+  readOperands,
   readOperandTypes,
+  type OperandType,
 } from "../src/app.ts";
 
 describe("tautology", () => {
@@ -369,5 +371,82 @@ describe("readOperand", () => {
 
     const result = readOperand(mockStory, 0x00, "large constant");
     expect(result).toEqual({ type: "large constant", value: 0xff00, bytesConsumed: 2 });
+  });
+});
+
+describe("readOperands", () => {
+  test("reads zero operands for an empty type list", () => {
+    const mockStory = new Uint8Array(10);
+    const result = readOperands(mockStory, 0x00, []);
+    expect(result).toEqual({ operands: [], totalBytesConsumed: 0 });
+  });
+
+  test("reads a single small constant operand", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 99;
+
+    const result = readOperands(mockStory, 0x00, ["small constant"]);
+    expect(result).toEqual({
+      operands: [{ type: "small constant", value: 99, bytesConsumed: 1 }],
+      totalBytesConsumed: 1,
+    });
+  });
+
+  test("reads a mix of types in sequence, advancing the address correctly", () => {
+    const mockStory = new Uint8Array(10);
+    // large constant at 0x00-0x01: 0x1234
+    mockStory[0x00] = 0x12;
+    mockStory[0x01] = 0x34;
+    // variable at 0x02
+    mockStory[0x02] = 0x05;
+    // small constant at 0x03
+    mockStory[0x03] = 0x07;
+
+    const types: OperandType[] = ["large constant", "variable", "small constant"];
+    const result = readOperands(mockStory, 0x00, types);
+
+    expect(result).toEqual({
+      operands: [
+        { type: "large constant", value: 0x1234, bytesConsumed: 2 },
+        { type: "variable", value: 0x05, bytesConsumed: 1 },
+        { type: "small constant", value: 0x07, bytesConsumed: 1 },
+      ],
+      totalBytesConsumed: 4,
+    });
+  });
+
+  test("starts reading from a nonzero startAddress, not always from 0", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0xff; // poison — should never be read
+    mockStory[0x06] = 0x2a;
+
+    const result = readOperands(mockStory, 0x06, ["small constant"]);
+    expect(result).toEqual({
+      operands: [{ type: "small constant", value: 0x2a, bytesConsumed: 1 }],
+      totalBytesConsumed: 1,
+    });
+  });
+
+  test("four large constants advance the address by 8 total bytes", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0x00;
+    mockStory[0x01] = 0x01;
+    mockStory[0x02] = 0x00;
+    mockStory[0x03] = 0x02;
+    mockStory[0x04] = 0x00;
+    mockStory[0x05] = 0x03;
+    mockStory[0x06] = 0x00;
+    mockStory[0x07] = 0x04;
+
+    const types: OperandType[] = [
+      "large constant",
+      "large constant",
+      "large constant",
+      "large constant",
+    ];
+    const result = readOperands(mockStory, 0x00, types);
+
+    expect(result.operands.map((o) => o.value)).toEqual([1, 2, 3, 4]);
+    expect(result.totalBytesConsumed).toBe(8);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { decodeForm, decodeOperandCount } from "../src/app.ts";
+import { decodeForm, decodeOperandCount, decodeOperandTypes } from "../src/app.ts";
 
 describe("tautology", () => {
   test("reality still works", () => {
@@ -72,5 +72,53 @@ describe("decodeOperandCount", () => {
 
   test("variable form with bit 5 set is VAR", () => {
     expect(decodeOperandCount(0xe0, "variable")).toBe("VAR"); // call_vs as VAR
+  });
+});
+
+describe("decodeOperandTypes", () => {
+  describe("long form", () => {
+    test("both bits 0 → small constant, small constant", () => {
+      expect(decodeOperandTypes(0x05, "long", "2OP")).toEqual(["small constant", "small constant"]);
+    });
+
+    test("bit6=1, bit5=0 → variable, small constant", () => {
+      expect(decodeOperandTypes(0x45, "long", "2OP")).toEqual(["variable", "small constant"]);
+    });
+
+    test("bit6=0, bit5=1 → small constant, variable", () => {
+      expect(decodeOperandTypes(0x25, "long", "2OP")).toEqual(["small constant", "variable"]);
+    });
+
+    test("both bits 1 → variable, variable", () => {
+      expect(decodeOperandTypes(0x65, "long", "2OP")).toEqual(["variable", "variable"]);
+    });
+  });
+
+  describe("short form", () => {
+    test("0OP yields no operand types", () => {
+      expect(decodeOperandTypes(0xb0, "short", "0OP")).toEqual([]);
+    });
+
+    test("type bits 00 → large constant", () => {
+      expect(decodeOperandTypes(0x8f, "short", "1OP")).toEqual(["large constant"]);
+    });
+
+    test("type bits 01 → small constant", () => {
+      expect(decodeOperandTypes(0x9f, "short", "1OP")).toEqual(["small constant"]);
+    });
+
+    test("type bits 10 → variable", () => {
+      expect(decodeOperandTypes(0xaf, "short", "1OP")).toEqual(["variable"]);
+    });
+  });
+
+  describe("unsupported forms", () => {
+    test("throws for variable form (not yet implemented)", () => {
+      expect(() => decodeOperandTypes(0xe0, "variable", "VAR")).toThrow();
+    });
+
+    test("throws for extended form (not yet implemented)", () => {
+      expect(() => decodeOperandTypes(0xbe, "extended", "VAR")).toThrow();
+    });
   });
 });

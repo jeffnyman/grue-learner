@@ -5,6 +5,40 @@ export type InstructionForm = "long" | "short" | "variable" | "extended";
 
 export type OperandCount = "0OP" | "1OP" | "2OP" | "VAR";
 
+export type OperandType = "large constant" | "small constant" | "variable" | "omitted";
+
+export function decodeOperandTypes(
+  opcodeByte: number,
+  form: InstructionForm,
+  operandCount: OperandCount,
+): OperandType[] {
+  if (form === "long") {
+    const firstBit = (opcodeByte >> 6) & 0b1;
+    const secondBit = (opcodeByte >> 5) & 0b1;
+    return [longFormBitToType(firstBit), longFormBitToType(secondBit)];
+  }
+
+  if (form === "short") {
+    if (operandCount === "0OP") return [];
+
+    const typeBits = (opcodeByte >> 4) & 0b11;
+    return [twoBitToType(typeBits)];
+  }
+
+  throw new Error(`decodeOperandTypes: ${form} form not yet supported`);
+}
+
+function longFormBitToType(bit: number): OperandType {
+  return bit === 0 ? "small constant" : "variable";
+}
+
+function twoBitToType(bits: number): OperandType {
+  if (bits === 0b00) return "large constant";
+  if (bits === 0b01) return "small constant";
+  if (bits === 0b10) return "variable";
+  return "omitted";
+}
+
 export function decodeOperandCount(opcodeByte: number, form: InstructionForm): OperandCount {
   if (form === "long") return "2OP";
   if (form === "extended") return "VAR";

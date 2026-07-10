@@ -1,9 +1,12 @@
 import { describe, test, expect } from "vitest";
 import {
   decodeForm,
+  decodeOpcodeNumber,
   decodeOperandCount,
   decodeOperandTypes,
   decodeVariableFormOperandTypes,
+  isDoubleVariableOpcode,
+  readOpcodeNumber,
   readOperand,
   readOperands,
   readOperandTypes,
@@ -448,5 +451,55 @@ describe("readOperands", () => {
 
     expect(result.operands.map((o) => o.value)).toEqual([1, 2, 3, 4]);
     expect(result.totalBytesConsumed).toBe(8);
+  });
+});
+
+describe("decodeOpcodeNumber", () => {
+  test("long form: bottom 5 bits", () => {
+    expect(decodeOpcodeNumber(0b00000101, "long")).toBe(5); // je-ish
+    expect(decodeOpcodeNumber(0b01011111, "long")).toBe(31); // max long-form opcode number
+  });
+
+  test("short form: bottom 4 bits", () => {
+    expect(decodeOpcodeNumber(0b10110000, "short")).toBe(0); // rtrue
+    expect(decodeOpcodeNumber(0b10111111, "short")).toBe(15); // max short-form opcode number
+  });
+
+  test("variable form: bottom 5 bits", () => {
+    expect(decodeOpcodeNumber(0b11100001, "variable")).toBe(1); // je-as-VAR-ish
+    expect(decodeOpcodeNumber(0b11111010, "variable")).toBe(26); // call_vn2
+  });
+
+  test("throws for extended form", () => {
+    expect(() => decodeOpcodeNumber(0xbe, "extended")).toThrow();
+  });
+});
+
+describe("readOpcodeNumber", () => {
+  test("delegates to decodeOpcodeNumber for long/short/variable", () => {
+    const mockStory = new Uint8Array(10);
+    expect(readOpcodeNumber(mockStory, 0b00000101, 0x00, "long")).toBe(5);
+    expect(readOpcodeNumber(mockStory, 0b10110000, 0x00, "short")).toBe(0);
+    expect(readOpcodeNumber(mockStory, 0b11100001, 0x00, "variable")).toBe(1);
+  });
+
+  test("reads the second byte for extended form", () => {
+    const mockStory = new Uint8Array(10);
+    const opcodeAddress = 0x04;
+    mockStory[opcodeAddress] = 0xbe;
+    mockStory[opcodeAddress + 1] = 0x09; // e.g. save_undo's extended opcode number
+
+    expect(readOpcodeNumber(mockStory, 0xbe, opcodeAddress, "extended")).toBe(9);
+  });
+});
+
+describe("isDoubleVariableOpcode (post-refactor)", () => {
+  test("still correctly identifies call_vs2 and call_vn2", () => {
+    expect(isDoubleVariableOpcode(0b11101100)).toBe(true); // opcode 12
+    expect(isDoubleVariableOpcode(0b11111010)).toBe(true); // opcode 26
+  });
+
+  test("still correctly rejects an ordinary VAR opcode", () => {
+    expect(isDoubleVariableOpcode(0xe0)).toBe(false); // opcode 0
   });
 });

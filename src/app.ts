@@ -39,11 +39,6 @@ export function decodeOperandTypes(
   throw new Error(`decodeOperandTypes: ${form} form not yet supported`);
 }
 
-function isDoubleVariableOpcode(opcodeByte: number): boolean {
-  const opcodeNumber = opcodeByte & 0b00011111; // bottom 5 bits, per §4.3.3
-  return opcodeNumber === 12 || opcodeNumber === 26; // call_vs2, call_vn2
-}
-
 function longFormBitToType(bit: number): OperandType {
   return bit === 0 ? "small constant" : "variable";
 }
@@ -53,6 +48,36 @@ function twoBitToType(bits: number): OperandType {
   if (bits === 0b01) return "small constant";
   if (bits === 0b10) return "variable";
   return "omitted";
+}
+
+export function isDoubleVariableOpcode(opcodeByte: number): boolean {
+  const opcodeNumber = decodeOpcodeNumber(opcodeByte, "variable");
+  return opcodeNumber === 12 || opcodeNumber === 26; // call_vs2, call_vn2
+}
+
+export function decodeOpcodeNumber(opcodeByte: number, form: InstructionForm): number {
+  if (form === "long" || form === "variable") {
+    return opcodeByte & 0b00011111; // bottom 5 bits
+  }
+
+  if (form === "short") {
+    return opcodeByte & 0b00001111; // bottom 4 bits
+  }
+
+  throw new Error(`decodeOpcodeNumber: ${form} form's opcode number is not in this byte`);
+}
+
+export function readOpcodeNumber(
+  storyData: Uint8Array,
+  opcodeByte: number,
+  opcodeAddress: number,
+  form: InstructionForm,
+): number {
+  if (form === "extended") {
+    return readByte(storyData, opcodeAddress + 1);
+  }
+
+  return decodeOpcodeNumber(opcodeByte, form);
 }
 
 export function readOperands(

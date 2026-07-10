@@ -219,11 +219,6 @@ describe("readOperandTypes", () => {
       "large constant",
     ]);
   });
-
-  test("throws for extended form (not yet implemented)", () => {
-    const mockStory = new Uint8Array(10);
-    expect(() => readOperandTypes(mockStory, 0xbe, 0x00, "extended", "VAR")).toThrow();
-  });
 });
 
 describe("readOperandTypes — double-variable opcodes", () => {
@@ -291,5 +286,45 @@ describe("readOperandTypes — double-variable opcodes", () => {
       "large constant",
       "large constant",
     ]);
+  });
+});
+
+describe("readOperandTypes — extended form", () => {
+  test("reads the type byte at opcodeAddress + 2 (skipping the opcode-number byte)", () => {
+    const mockStory = new Uint8Array(10);
+    const opcodeAddress = 0x00;
+    mockStory[opcodeAddress] = 0xbe; // extended form marker
+    mockStory[opcodeAddress + 1] = 0x09; // opcode number (irrelevant to type decoding itself)
+    mockStory[opcodeAddress + 2] = 0b00011011; // large constant, small constant, variable, then omitted
+
+    const result = readOperandTypes(mockStory, 0xbe, opcodeAddress, "extended", "VAR");
+    expect(result).toEqual(["large constant", "small constant", "variable"]);
+  });
+
+  test("does not read the type byte at opcodeAddress + 1 by mistake", () => {
+    const mockStory = new Uint8Array(10);
+    const opcodeAddress = 0x00;
+    mockStory[opcodeAddress] = 0xbe;
+    mockStory[opcodeAddress + 1] = 0xff; // if wrongly read as the type byte, this would yield []
+    mockStory[opcodeAddress + 2] = 0b00000000; // four large constants
+
+    const result = readOperandTypes(mockStory, 0xbe, opcodeAddress, "extended", "VAR");
+    expect(result).toEqual([
+      "large constant",
+      "large constant",
+      "large constant",
+      "large constant",
+    ]);
+  });
+
+  test("extended form respects the same stop-at-omitted rule", () => {
+    const mockStory = new Uint8Array(10);
+    const opcodeAddress = 0x03;
+    mockStory[opcodeAddress] = 0xbe;
+    mockStory[opcodeAddress + 1] = 0x00;
+    mockStory[opcodeAddress + 2] = 0b11111111; // all omitted
+
+    const result = readOperandTypes(mockStory, 0xbe, opcodeAddress, "extended", "VAR");
+    expect(result).toEqual([]);
   });
 });

@@ -68,7 +68,15 @@ export function readOperandTypes(
     return types;
   }
 
-  throw new Error(`readOperandTypes: ${form} form not yet supported`);
+  if (form === "extended") {
+    const typeByte = readByte(storyData, opcodeAddress + 2);
+    return decodeVariableFormOperandTypes(typeByte);
+  }
+
+  // Exhaustiveness guard: every InstructionForm case is handled above.
+  // If this ever fires, InstructionForm gained a new member without a matching branch here.
+  const unreachable: never = form;
+  throw new Error(`readOperandTypes: unhandled form ${unreachable}`);
 }
 
 export function decodeVariableFormOperandTypes(typeByte: number): OperandType[] {

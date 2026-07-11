@@ -67,6 +67,11 @@ export type OperandCount = "0OP" | "1OP" | "2OP" | "VAR";
 
 export type OperandType = "large constant" | "small constant" | "variable" | "omitted";
 
+export interface OperandTypesResult {
+  types: OperandType[];
+  typeInfoBytesConsumed: number; // bytes read beyond the opcode byte(s) themselves, purely for type info
+}
+
 export interface DecodedOperand {
   type: OperandType;
   value: number; // raw encoded value: the literal for constants, the variable number for "variable"
@@ -332,9 +337,10 @@ export function readOperandTypes(
   opcodeAddress: number,
   form: InstructionForm,
   operandCount: OperandCount,
-): OperandType[] {
+): OperandTypesResult {
   if (form === "long" || form === "short") {
-    return decodeOperandTypes(opcodeByte, form, operandCount);
+    const types = decodeOperandTypes(opcodeByte, form, operandCount);
+    return { types, typeInfoBytesConsumed: 0 }; // types packed in the opcode byte itself
   }
 
   if (form === "variable") {
@@ -344,19 +350,18 @@ export function readOperandTypes(
     if (isDoubleVariableOpcode(opcodeByte) && types.length === 4) {
       const secondTypeByte = readByte(storyData, opcodeAddress + 2);
       const secondTypes = decodeVariableFormOperandTypes(secondTypeByte);
-      return [...types, ...secondTypes];
+      return { types: [...types, ...secondTypes], typeInfoBytesConsumed: 2 };
     }
 
-    return types;
+    return { types, typeInfoBytesConsumed: 1 };
   }
 
   if (form === "extended") {
     const typeByte = readByte(storyData, opcodeAddress + 2);
-    return decodeVariableFormOperandTypes(typeByte);
+    const types = decodeVariableFormOperandTypes(typeByte);
+    return { types, typeInfoBytesConsumed: 1 };
   }
 
-  // Exhaustiveness guard: every InstructionForm case is handled above.
-  // If this ever fires, InstructionForm gained a new member without a matching branch here.
   const unreachable: never = form;
   throw new Error(`readOperandTypes: unhandled form ${unreachable}`);
 }

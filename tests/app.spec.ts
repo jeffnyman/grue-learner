@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import {
   decodeForm,
+  decodeInstruction,
   decodeOpcodeNumber,
   decodeOperandCount,
   decodeOperandTypes,
@@ -561,75 +562,76 @@ describe("readStoreByte", () => {
 });
 
 describe("hasStoreByte", () => {
-  test("call (VAR:224) stores", () => {
-    expect(hasStoreByte("VAR", 224, 3)).toBe(true);
+  test("call (VAR, encoded opcode 0) stores", () => {
+    expect(hasStoreByte("VAR", 0, 3)).toBe(true);
   });
 
-  test("storew (VAR:225) does not store", () => {
-    expect(hasStoreByte("VAR", 225, 3)).toBe(false);
+  test("storew (VAR, encoded opcode 1) does not store", () => {
+    expect(hasStoreByte("VAR", 1, 3)).toBe(false);
   });
 
-  test("add (2OP:20) stores", () => {
+  test("add (2OP, encoded opcode 20) stores", () => {
     expect(hasStoreByte("2OP", 20, 3)).toBe(true);
   });
 
-  test("test_attr (2OP:10) does not store (it branches instead)", () => {
+  test("test_attr (2OP, encoded opcode 10) does not store (it branches instead)", () => {
     expect(hasStoreByte("2OP", 10, 3)).toBe(false);
   });
 
-  test("store (2OP:13) does not store via a store byte", () => {
+  test("store (2OP, encoded opcode 13) does not store via a store byte", () => {
     expect(hasStoreByte("2OP", 13, 3)).toBe(false);
   });
 
-  test("jz (1OP:128) does not store", () => {
-    expect(hasStoreByte("1OP", 128, 3)).toBe(false);
+  test("jz (1OP, encoded opcode 0) does not store", () => {
+    expect(hasStoreByte("1OP", 0, 3)).toBe(false);
   });
 
-  test("rfalse (0OP:177) does not store", () => {
-    expect(hasStoreByte("0OP", 177, 3)).toBe(false);
+  test("rfalse (0OP, encoded opcode 1) does not store", () => {
+    expect(hasStoreByte("0OP", 1, 3)).toBe(false);
   });
 
-  test("sread (VAR:228) does not store in V3", () => {
-    expect(hasStoreByte("VAR", 228, 3)).toBe(false);
+  test("sread (VAR, encoded opcode 4) does not store in V3", () => {
+    expect(hasStoreByte("VAR", 4, 3)).toBe(false);
   });
 
-  test("sread (VAR:228) does not store in V4 either", () => {
-    expect(hasStoreByte("VAR", 228, 4)).toBe(false);
+  test("sread (VAR, encoded opcode 4) does not store in V4 either", () => {
+    expect(hasStoreByte("VAR", 4, 4)).toBe(false);
   });
 
-  test("aread (VAR:228) stores from V5 onward", () => {
-    expect(hasStoreByte("VAR", 228, 5)).toBe(true);
-    expect(hasStoreByte("VAR", 228, 8)).toBe(true);
+  test("aread (VAR, encoded opcode 4) stores from V5 onward", () => {
+    expect(hasStoreByte("VAR", 4, 5)).toBe(true);
+    expect(hasStoreByte("VAR", 4, 8)).toBe(true);
   });
 
   test("throws for an opcode not yet in the seed table", () => {
-    expect(() => hasStoreByte("VAR", 231, 3)).toThrow(); // random — not seeded yet
+    // random is VAR, encoded opcode 7 — genuinely unseeded in our table
+    expect(() => hasStoreByte("VAR", 7, 3)).toThrow();
   });
 });
 
 describe("readStoreByteIfPresent", () => {
-  test("returns the store target when the opcode stores (call, VAR:224)", () => {
+  test("returns the store target when the opcode stores (call, VAR encoded opcode 0)", () => {
     const mockStory = new Uint8Array(10);
     mockStory[0x00] = 0x00; // store to the stack
 
-    const result = readStoreByteIfPresent(mockStory, 0x00, "VAR", 224, 3);
+    const result = readStoreByteIfPresent(mockStory, 0x00, "VAR", 0, 3);
     expect(result).toEqual({ variableNumber: 0, bytesConsumed: 1 });
   });
 
-  test("returns null when the opcode does not store (storew, VAR:225)", () => {
+  test("returns null when the opcode does not store (storew, VAR encoded opcode 1)", () => {
     const mockStory = new Uint8Array(10);
     mockStory[0x00] = 0xff; // poison — should never be read
 
-    const result = readStoreByteIfPresent(mockStory, 0x00, "VAR", 225, 3);
+    const result = readStoreByteIfPresent(mockStory, 0x00, "VAR", 1, 3);
     expect(result).toBeNull();
   });
 
-  test("respects the version boundary for sread/aread (VAR:228)", () => {
+  test("respects the version boundary for sread/aread (VAR encoded opcode 4)", () => {
     const mockStory = new Uint8Array(10);
     mockStory[0x00] = 0x10; // would be global 16, if read
 
-    expect(readStoreByteIfPresent(mockStory, 0x00, "VAR", 228, 4)).toBeNull();
-    expect(readStoreByteIfPresent(mockStory, 0x00, "VAR", 228, 5)).toEqual({
+    expect(readStoreByteIfPresent(mockStory, 0x00, "VAR", 4, 4)).toBeNull();
+    expect(readStoreByteIfPresent(mockStory, 0x00, "VAR", 4, 5)).toEqual({
       variableNumber: 16,
       bytesConsumed: 1,
     });
@@ -637,7 +639,8 @@ describe("readStoreByteIfPresent", () => {
 
   test("propagates the throw for an opcode not yet in the seed table", () => {
     const mockStory = new Uint8Array(10);
-    expect(() => readStoreByteIfPresent(mockStory, 0x00, "VAR", 231, 3)).toThrow();
+    // random is VAR, encoded opcode 7 — genuinely unseeded
+    expect(() => readStoreByteIfPresent(mockStory, 0x00, "VAR", 7, 3)).toThrow();
   });
 
   test("reads at the given address, not always address 0", () => {
@@ -645,38 +648,39 @@ describe("readStoreByteIfPresent", () => {
     mockStory[0x00] = 0xff; // poison
     mockStory[0x07] = 42;
 
-    const result = readStoreByteIfPresent(mockStory, 0x07, "2OP", 20, 3); // add
+    const result = readStoreByteIfPresent(mockStory, 0x07, "2OP", 20, 3); // add — unchanged, 2OP coincides
     expect(result).toEqual({ variableNumber: 42, bytesConsumed: 1 });
   });
 });
 
 describe("hasBranchByte", () => {
-  test("test_attr (2OP:10) branches", () => {
+  test("test_attr (2OP, encoded opcode 10) branches", () => {
     expect(hasBranchByte("2OP", 10, 3)).toBe(true);
   });
 
-  test("jz (1OP:128) branches", () => {
-    expect(hasBranchByte("1OP", 128, 3)).toBe(true);
+  test("jz (1OP, encoded opcode 0) branches", () => {
+    expect(hasBranchByte("1OP", 0, 3)).toBe(true);
   });
 
-  test("jump (1OP:140) does not branch, despite its name", () => {
-    expect(hasBranchByte("1OP", 140, 3)).toBe(false);
+  test("jump (1OP, encoded opcode 12) does not branch, despite its name", () => {
+    expect(hasBranchByte("1OP", 12, 3)).toBe(false);
   });
 
-  test("add (2OP:20) does not branch", () => {
+  test("add (2OP, encoded opcode 20) does not branch", () => {
     expect(hasBranchByte("2OP", 20, 3)).toBe(false);
   });
 
-  test("call (VAR:224) does not branch", () => {
-    expect(hasBranchByte("VAR", 224, 3)).toBe(false);
+  test("call (VAR, encoded opcode 0) does not branch", () => {
+    expect(hasBranchByte("VAR", 0, 3)).toBe(false);
   });
 
-  test("rfalse (0OP:177) does not branch", () => {
-    expect(hasBranchByte("0OP", 177, 3)).toBe(false);
+  test("rfalse (0OP, encoded opcode 1) does not branch", () => {
+    expect(hasBranchByte("0OP", 1, 3)).toBe(false);
   });
 
   test("throws for an opcode not yet in the seed table", () => {
-    expect(() => hasBranchByte("VAR", 231, 3)).toThrow();
+    // random is VAR, encoded opcode 7 — genuinely unseeded in our table
+    expect(() => hasBranchByte("VAR", 7, 3)).toThrow();
   });
 });
 
@@ -785,7 +789,7 @@ describe("interpretBranch", () => {
 });
 
 describe("readBranchByteIfPresent", () => {
-  test("returns null when the opcode does not branch (add, 2OP:20)", () => {
+  test("returns null when the opcode does not branch (add, 2OP encoded opcode 20)", () => {
     const mockStory = new Uint8Array(10);
     mockStory[0x00] = 0xff; // poison — should never be read
 
@@ -793,13 +797,13 @@ describe("readBranchByteIfPresent", () => {
     expect(result).toBeNull();
   });
 
-  test("returns a jump outcome when the opcode branches (jz, 1OP:128)", () => {
+  test("returns a jump outcome when the opcode branches (jz, 1OP encoded opcode 0)", () => {
     const mockStory = new Uint8Array(32);
     const address = 0x10;
     // 1-byte form, branch on true, offset 20
     mockStory[address] = 0b11010100;
 
-    const result = readBranchByteIfPresent(mockStory, address, "1OP", 128, 3);
+    const result = readBranchByteIfPresent(mockStory, address, "1OP", 0, 3);
     // address after branch data = 0x11; target = 0x11 + 20 - 2 = 0x23
     expect(result).toEqual({
       outcome: { kind: "jump", targetAddress: 0x23 },
@@ -807,7 +811,7 @@ describe("readBranchByteIfPresent", () => {
     });
   });
 
-  test("returns returnFalse for offset 0 (test_attr, 2OP:10)", () => {
+  test("returns returnFalse for offset 0 (test_attr, 2OP encoded opcode 10)", () => {
     const mockStory = new Uint8Array(48);
     const address = 0x20;
     // 1-byte form, offset 0
@@ -827,14 +831,15 @@ describe("readBranchByteIfPresent", () => {
     mockStory[address] = 0b10000000;
     mockStory[address + 1] = 0x0a;
 
-    const result = readBranchByteIfPresent(mockStory, address, "1OP", 128, 3);
+    const result = readBranchByteIfPresent(mockStory, address, "1OP", 0, 3); // jz
     expect(result?.bytesConsumed).toBe(2);
     expect(result?.outcome.kind).toBe("jump");
   });
 
   test("propagates the throw for an opcode not yet in the seed table", () => {
     const mockStory = new Uint8Array(10);
-    expect(() => readBranchByteIfPresent(mockStory, 0x00, "VAR", 231, 3)).toThrow();
+    // random is VAR, encoded opcode 7 — genuinely unseeded
+    expect(() => readBranchByteIfPresent(mockStory, 0x00, "VAR", 7, 3)).toThrow();
   });
 });
 
@@ -897,5 +902,47 @@ describe("readTextArgument", () => {
 
     expect(result.bytesConsumed).toBe(2); // main string is still just 1 word
     expect(result.tokens[0]).toEqual({ type: "zscii", value: 97 }); // 'a' resolved via abbreviation
+  });
+});
+
+describe("decodeInstruction — narrow slice (0OP, no trailing arguments)", () => {
+  test("decodes rfalse (0OP:177) with no operands, store, branch, or text", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0xb1; // %10110001 — short form, 0OP, opcode number 1 (rfalse)
+
+    const result = decodeInstruction(mockStory, 0x00, 3, 0x00);
+
+    expect(result).toEqual({
+      address: 0x00,
+      form: "short",
+      operandCount: "0OP",
+      opcodeNumber: 1,
+      operands: [],
+      storeTarget: null,
+      branchOutcome: null,
+      branchBytesConsumed: null,
+      text: null,
+      nextInstructionAddress: 0x01, // just the 1 opcode byte
+    });
+  });
+
+  test("decodes new_line (0OP:187) with no operands, store, branch, or text", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x05] = 0xbb; // %10111011 — short form, 0OP, opcode number 11 (new_line)
+
+    const result = decodeInstruction(mockStory, 0x05, 3, 0x00);
+
+    expect(result).toEqual({
+      address: 0x05,
+      form: "short",
+      operandCount: "0OP",
+      opcodeNumber: 11,
+      operands: [],
+      storeTarget: null,
+      branchOutcome: null,
+      branchBytesConsumed: null,
+      text: null,
+      nextInstructionAddress: 0x06, // just the 1 opcode byte, from a nonzero start address
+    });
   });
 });

@@ -11,54 +11,46 @@ export type BranchOutcome =
 
 // prettier-ignore
 const storeByteTable: Record<string, StoreInfo> = {
-  // VAR
-  "VAR:224": true,                      // call / call_vs — §14
-  "VAR:225": false,                     // storew — §14
-  "VAR:227": false,                     // put_prop — §14
-  "VAR:228": { storesFromVersion: 5 },  // sread (V3/V4, no store) → aread (V5+, stores) — §14
+  "VAR:0": true,                        // call / call_vs
+  "VAR:1": false,                       // storew
+  "VAR:3": false,                       // put_prop
+  "VAR:4": { storesFromVersion: 5 },    // sread → aread
 
-  // 2OP
-  "2OP:10": false,                      // test_attr — branches, does not store — §14
-  "2OP:13": false,                      // store — writes via operand, not a store byte — §14
-  "2OP:14": false,                      // insert_obj — §14
-  "2OP:16": true,                       // loadb — §14
-  "2OP:20": true,                       // add — §14
+  "2OP:10": false,                      // test_attr
+  "2OP:13": false,                      // store
+  "2OP:14": false,                      // insert_obj
+  "2OP:16": true,                       // loadb
+  "2OP:20": true,                       // add
 
-  // 1OP
-  "1OP:128": false,                     // jz — branches, does not store — §14
-  "1OP:139": false,                     // ret — §14/§15
-  "1OP:140": false,                     // jump — not a branch instruction either — §15
+  "1OP:0": false,                       // jz
+  "1OP:11": false,                      // ret
+  "1OP:12": false,                      // jump
 
-  // 0OP
-  "0OP:177": false,                     // rfalse — §14
-  "0OP:178": false,                     // print — text argument, not a store — §4.8, §14
-  "0OP:187": false,                     // new_line — §14
+  "0OP:1": false,                       // rfalse
+  "0OP:2": false,                       // print
+  "0OP:11": false,                      // new_line
 };
 
 // prettier-ignore
 const branchByteTable: Record<string, boolean> = {
-  // VAR
-  "VAR:224": false,  // call / call_vs — §14
-  "VAR:225": false,  // storew — §14
-  "VAR:227": false,  // put_prop — §14
-  "VAR:228": false,  // sread/aread — §14 (no ?(label) or branch marker in either V3 or V5 row)
+  "VAR:0": false,   // call
+  "VAR:1": false,   // storew
+  "VAR:3": false,   // put_prop
+  "VAR:4": false,   // sread/aread
 
-  // 2OP
-  "2OP:10": true,    // test_attr — §14, ?(label)
-  "2OP:13": false,   // store — §14
-  "2OP:14": false,   // insert_obj — §14
-  "2OP:16": false,   // loadb — §14
-  "2OP:20": false,   // add — §14
+  "2OP:10": true,   // test_attr
+  "2OP:13": false,  // store
+  "2OP:14": false,  // insert_obj
+  "2OP:16": false,  // loadb
+  "2OP:20": false,  // add
 
-  // 1OP
-  "1OP:128": true,   // jz — §14, ?(label)
-  "1OP:139": false,  // ret — §14/§15
-  "1OP:140": false,  // jump — §15, explicitly "not a branch instruction"
+  "1OP:0": true,    // jz
+  "1OP:11": false,  // ret
+  "1OP:12": false,  // jump
 
-  // 0OP
-  "0OP:177": false,  // rfalse — §14
-  "0OP:178": false,  // print — text argument, not branch — §4.8, §14
-  "0OP:187": false,  // new_line — §14
+  "0OP:1": false,   // rfalse
+  "0OP:2": false,   // print
+  "0OP:11": false,  // new_line
 };
 
 export type InstructionForm = "long" | "short" | "variable" | "extended";
@@ -66,6 +58,19 @@ export type InstructionForm = "long" | "short" | "variable" | "extended";
 export type OperandCount = "0OP" | "1OP" | "2OP" | "VAR";
 
 export type OperandType = "large constant" | "small constant" | "variable" | "omitted";
+
+export interface DecodedInstruction {
+  address: number;
+  form: InstructionForm;
+  operandCount: OperandCount;
+  opcodeNumber: number;
+  operands: DecodedOperand[];
+  storeTarget: StoreTarget | null;
+  branchOutcome: BranchOutcome | null;
+  branchBytesConsumed: 1 | 2 | null;
+  text: DecodedToken[] | null;
+  nextInstructionAddress: number;
+}
 
 export interface OperandTypesResult {
   types: OperandType[];
@@ -252,6 +257,71 @@ export function decodeOperandTypes(
   }
 
   throw new Error(`decodeOperandTypes: ${form} form not yet supported`);
+}
+
+export function decodeInstruction(
+  storyData: Uint8Array,
+  address: number,
+  version: number,
+  abbreviationsTableAddress: number,
+): DecodedInstruction {
+  const opcodeByte = readByte(storyData, address);
+  const form = decodeForm(opcodeByte, version);
+  const operandCount = decodeOperandCount(opcodeByte, form);
+  const opcodeNumber = readOpcodeNumber(storyData, opcodeByte, address, form);
+
+  const operandTypesResult = readOperandTypes(storyData, opcodeByte, address, form, operandCount);
+  const operandsStartAddress =
+    address + headerBytesConsumed(form, operandTypesResult.typeInfoBytesConsumed);
+  const operandsResult = readOperands(storyData, operandsStartAddress, operandTypesResult.types);
+  const afterOperandsAddress = operandsStartAddress + operandsResult.totalBytesConsumed;
+
+  const storeTarget = readStoreByteIfPresent(
+    storyData,
+    afterOperandsAddress,
+    operandCount,
+    opcodeNumber,
+    version,
+  );
+  const afterStoreAddress = afterOperandsAddress + (storeTarget?.bytesConsumed ?? 0);
+
+  const branchResult = readBranchByteIfPresent(
+    storyData,
+    afterStoreAddress,
+    operandCount,
+    opcodeNumber,
+    version,
+  );
+  const afterBranchAddress = afterStoreAddress + (branchResult?.bytesConsumed ?? 0);
+
+  const text = hasTextArgument(operandCount, opcodeNumber)
+    ? readTextArgument(storyData, afterBranchAddress, version, abbreviationsTableAddress)
+    : null;
+  const nextInstructionAddress = afterBranchAddress + (text?.bytesConsumed ?? 0);
+
+  return {
+    address,
+    form,
+    operandCount,
+    opcodeNumber,
+    operands: operandsResult.operands,
+    storeTarget,
+    branchOutcome: branchResult?.outcome ?? null,
+    branchBytesConsumed: branchResult?.bytesConsumed ?? null,
+    text: text?.tokens ?? null,
+    nextInstructionAddress,
+  };
+}
+
+function headerBytesConsumed(form: InstructionForm, typeInfoBytesConsumed: number): number {
+  if (form === "extended") {
+    return 2 + typeInfoBytesConsumed; // marker byte + opcode-number byte + type byte(s)
+  }
+  return 1 + typeInfoBytesConsumed; // opcode byte (+ type byte(s) for variable form)
+}
+
+function hasTextArgument(operandCount: OperandCount, opcodeNumber: number): boolean {
+  return operandCount === "0OP" && (opcodeNumber === 2 || opcodeNumber === 3); // print, print_ret — §4.8
 }
 
 function longFormBitToType(bit: number): OperandType {

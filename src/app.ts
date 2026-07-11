@@ -1,5 +1,6 @@
 import { readMemoryMap, readVersion, type MemoryMap } from "./header.ts";
 import { loadStoryFile, readByte, readWord } from "./utils.ts";
+import { decodeZString, type DecodedToken } from "./zstring.ts";
 
 type StoreInfo = boolean | { storesFromVersion: number };
 
@@ -91,6 +92,27 @@ export interface RawBranchInfo {
 export interface BranchReadResult {
   outcome: BranchOutcome;
   bytesConsumed: 1 | 2;
+}
+
+export interface TextArgumentResult {
+  tokens: DecodedToken[];
+  bytesConsumed: number;
+}
+
+export function readTextArgument(
+  storyData: Uint8Array,
+  startAddress: number,
+  version: number,
+  abbreviationsTableAddress: number,
+): TextArgumentResult {
+  const { tokens, wordsConsumed } = decodeZString(
+    storyData,
+    startAddress,
+    version,
+    abbreviationsTableAddress,
+  );
+
+  return { tokens, bytesConsumed: wordsConsumed * 2 };
 }
 
 export function interpretBranch(

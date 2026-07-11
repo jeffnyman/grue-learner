@@ -17,6 +17,7 @@ import {
   readRawBranchInfo,
   readStoreByte,
   readStoreByteIfPresent,
+  readTextArgument,
   type OperandType,
   type RawBranchInfo,
 } from "../src/app.ts";
@@ -822,5 +823,67 @@ describe("readBranchByteIfPresent", () => {
   test("propagates the throw for an opcode not yet in the seed table", () => {
     const mockStory = new Uint8Array(10);
     expect(() => readBranchByteIfPresent(mockStory, 0x00, "VAR", 231, 3)).toThrow();
+  });
+});
+
+describe("readTextArgument", () => {
+  test("decodes a single-word string and reports 2 bytes consumed", () => {
+    // Reusing the same known-good single-word fixture pattern from zstring.spec.ts
+    const mockStory = new Uint8Array(2);
+    const word = (1 << 15) | (6 << 10) | (9 << 5) | 14; // end-bit set, 'a','d','i' in A0
+
+    mockStory[0] = (word >> 8) & 0xff;
+    mockStory[1] = word & 0xff;
+
+    const result = readTextArgument(mockStory, 0, 5, 0);
+
+    expect(result.bytesConsumed).toBe(2);
+    expect(result.tokens).toEqual([
+      { type: "zscii", value: 97 }, // 'a'
+      { type: "zscii", value: 100 }, // 'd'
+      { type: "zscii", value: 105 }, // 'i'
+    ]);
+  });
+
+  test("multi-word string reports bytesConsumed as wordsConsumed * 2", () => {
+    // Two words: first with end-bit unset, second with end-bit set
+    const mockStory = new Uint8Array(4);
+    const word1 = (0 << 15) | (6 << 10) | (9 << 5) | 14;
+    const word2 = (1 << 15) | (0 << 10) | (0 << 5) | 0;
+
+    mockStory[0] = (word1 >> 8) & 0xff;
+    mockStory[1] = word1 & 0xff;
+    mockStory[2] = (word2 >> 8) & 0xff;
+    mockStory[3] = word2 & 0xff;
+
+    const result = readTextArgument(mockStory, 0, 5, 0);
+
+    expect(result.bytesConsumed).toBe(4); // 2 words * 2 bytes
+  });
+
+  test("passes abbreviationsTableAddress through to decodeZString correctly", () => {
+    // Word 1: zchar 1 (abbreviation trigger in V5), zchar 0 (z-index within set), then a filler zchar, end-bit unset would need a 2nd word — keep it simple: word ends here with end-bit set and a 3rd zchar of 5 (arbitrary, will decode independently)
+    // Simpler approach: point abbreviationsTableAddress at a known entry and confirm no crash / correct resolution.
+    const mockStory = new Uint8Array(20);
+    const abbrevTableAddress = 0x00;
+
+    // Abbreviation table entry 0 (z=1,x=0 -> index 0): points to word-address 0x02 (byte address 0x04)
+    mockStory[0x00] = 0x00;
+    mockStory[0x01] = 0x02;
+
+    // The abbreviation's own text at byte address 0x04: single word, 'a' (zchar 6), end-bit set
+    const abbrevWord = (1 << 15) | (6 << 10) | (5 << 5) | 5; // 'a', then two zchar-5 shifts (harmless filler)
+    mockStory[0x04] = (abbrevWord >> 8) & 0xff;
+    mockStory[0x05] = abbrevWord & 0xff;
+
+    // Main string at byte address 0x08: zchar 1 (abbr trigger), zchar 0 (index calc: 32*(1-1)+0=0), filler, end-bit set
+    const mainWord = (1 << 15) | (1 << 10) | (0 << 5) | 5;
+    mockStory[0x08] = (mainWord >> 8) & 0xff;
+    mockStory[0x09] = mainWord & 0xff;
+
+    const result = readTextArgument(mockStory, 0x08, 5, abbrevTableAddress);
+
+    expect(result.bytesConsumed).toBe(2); // main string is still just 1 word
+    expect(result.tokens[0]).toEqual({ type: "zscii", value: 97 }); // 'a' resolved via abbreviation
   });
 });

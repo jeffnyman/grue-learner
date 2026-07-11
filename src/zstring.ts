@@ -19,7 +19,7 @@ export interface DecoderState {
   lock: Alphabet; // only ever changes in V1-2
 }
 
-interface DecodedToken {
+export interface DecodedToken {
   type: "zscii" | "abbreviationError";
   value?: number;
 }

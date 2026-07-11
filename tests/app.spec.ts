@@ -9,6 +9,7 @@ import {
   hasStoreByte,
   interpretBranch,
   isDoubleVariableOpcode,
+  readBranchByteIfPresent,
   readOpcodeNumber,
   readOperand,
   readOperands,
@@ -767,5 +768,59 @@ describe("interpretBranch", () => {
       kind: "jump",
       targetAddress: 0x2ff6,
     });
+  });
+});
+
+describe("readBranchByteIfPresent", () => {
+  test("returns null when the opcode does not branch (add, 2OP:20)", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0xff; // poison — should never be read
+
+    const result = readBranchByteIfPresent(mockStory, 0x00, "2OP", 20, 3);
+    expect(result).toBeNull();
+  });
+
+  test("returns a jump outcome when the opcode branches (jz, 1OP:128)", () => {
+    const mockStory = new Uint8Array(32);
+    const address = 0x10;
+    // 1-byte form, branch on true, offset 20
+    mockStory[address] = 0b11010100;
+
+    const result = readBranchByteIfPresent(mockStory, address, "1OP", 128, 3);
+    // address after branch data = 0x11; target = 0x11 + 20 - 2 = 0x23
+    expect(result).toEqual({
+      outcome: { kind: "jump", targetAddress: 0x23 },
+      bytesConsumed: 1,
+    });
+  });
+
+  test("returns returnFalse for offset 0 (test_attr, 2OP:10)", () => {
+    const mockStory = new Uint8Array(48);
+    const address = 0x20;
+    // 1-byte form, offset 0
+    mockStory[address] = 0b11000000;
+
+    const result = readBranchByteIfPresent(mockStory, address, "2OP", 10, 3);
+    expect(result).toEqual({
+      outcome: { kind: "returnFalse" },
+      bytesConsumed: 1,
+    });
+  });
+
+  test("correctly reports bytesConsumed=2 for the 2-byte branch form", () => {
+    const mockStory = new Uint8Array(64);
+    const address = 0x30;
+    // 2-byte form, branch on true, high6=0, low byte=10
+    mockStory[address] = 0b10000000;
+    mockStory[address + 1] = 0x0a;
+
+    const result = readBranchByteIfPresent(mockStory, address, "1OP", 128, 3);
+    expect(result?.bytesConsumed).toBe(2);
+    expect(result?.outcome.kind).toBe("jump");
+  });
+
+  test("propagates the throw for an opcode not yet in the seed table", () => {
+    const mockStory = new Uint8Array(10);
+    expect(() => readBranchByteIfPresent(mockStory, 0x00, "VAR", 231, 3)).toThrow();
   });
 });

@@ -88,6 +88,11 @@ export interface RawBranchInfo {
   bytesConsumed: 1 | 2;
 }
 
+export interface BranchReadResult {
+  outcome: BranchOutcome;
+  bytesConsumed: 1 | 2;
+}
+
 export function interpretBranch(
   branchInfo: RawBranchInfo,
   branchStartAddress: number,
@@ -104,6 +109,23 @@ export function interpretBranch(
   const targetAddress = addressAfterBranchData + branchInfo.offset - 2;
 
   return { kind: "jump", targetAddress };
+}
+
+export function readBranchByteIfPresent(
+  storyData: Uint8Array,
+  address: number,
+  category: OperandCount,
+  opcodeNumber: number,
+  version: number,
+): BranchReadResult | null {
+  if (!hasBranchByte(category, opcodeNumber, version)) {
+    return null;
+  }
+
+  const rawBranchInfo = readRawBranchInfo(storyData, address);
+  const outcome = interpretBranch(rawBranchInfo, address);
+
+  return { outcome, bytesConsumed: rawBranchInfo.bytesConsumed };
 }
 
 export function readStoreByteIfPresent(

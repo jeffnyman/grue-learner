@@ -16,6 +16,7 @@ import {
   readOperands,
   readOperandTypes,
   readRawBranchInfo,
+  readRoutineHeader,
   readStoreByte,
   readStoreByteIfPresent,
   readTextArgument,
@@ -1209,5 +1210,82 @@ describe("decodeInstruction — real Zork I instruction (inc_chk)", () => {
       text: null,
       nextInstructionAddress: 0x06, // opcode(1) + type(1) + operands(1+2) + branch(1)
     });
+  });
+});
+
+describe("readRoutineHeader", () => {
+  test("reads a V3 routine header with defaults (4 locals, matching real Zork I routine 54c4)", () => {
+    const mockStory = new Uint8Array(20);
+    const routineAddress = 0x00;
+    mockStory[0x00] = 4; // local count
+    // 4 default words, all 0x0000, per the trace's "(0000, 0000, 0000, 0000)"
+    mockStory[0x01] = 0x00;
+    mockStory[0x02] = 0x00;
+    mockStory[0x03] = 0x00;
+    mockStory[0x04] = 0x00;
+    mockStory[0x05] = 0x00;
+    mockStory[0x06] = 0x00;
+    mockStory[0x07] = 0x00;
+    mockStory[0x08] = 0x00;
+
+    const result = readRoutineHeader(mockStory, routineAddress, 3);
+
+    expect(result).toEqual({
+      localCount: 4,
+      localDefaults: [0, 0, 0, 0],
+      firstInstructionAddress: 0x09, // 1 header byte + 4*2 default bytes
+    });
+  });
+
+  test("reads nonzero default values correctly", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 2; // 2 locals
+    mockStory[0x01] = 0x12;
+    mockStory[0x02] = 0x34; // default 1: 0x1234
+    mockStory[0x03] = 0x00;
+    mockStory[0x04] = 0x01; // default 2: 0x0001
+
+    const result = readRoutineHeader(mockStory, 0x00, 3);
+
+    expect(result.localDefaults).toEqual([0x1234, 0x0001]);
+    expect(result.firstInstructionAddress).toBe(0x05);
+  });
+
+  test("V5+ has no defaults block, regardless of local count", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 3; // 3 locals, but V5 has no default bytes to skip
+    mockStory[0x01] = 0xff; // this should be the first instruction, not a default
+
+    const result = readRoutineHeader(mockStory, 0x00, 5);
+
+    expect(result).toEqual({
+      localCount: 3,
+      localDefaults: [],
+      firstInstructionAddress: 0x01, // just the 1 header byte
+    });
+  });
+
+  test("zero locals means the header is just 1 byte, in any version", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0; // matches real Zork I's Main routine: "0 locals ()"
+
+    const resultV3 = readRoutineHeader(mockStory, 0x00, 3);
+    const resultV5 = readRoutineHeader(mockStory, 0x00, 5);
+
+    expect(resultV3.firstInstructionAddress).toBe(0x01);
+    expect(resultV5.firstInstructionAddress).toBe(0x01);
+  });
+
+  test("reads at a nonzero routine address, not always address 0", () => {
+    const mockStory = new Uint8Array(20);
+    const routineAddress = 0x0a;
+    mockStory[routineAddress] = 1;
+    mockStory[routineAddress + 1] = 0x00;
+    mockStory[routineAddress + 2] = 0x05;
+
+    const result = readRoutineHeader(mockStory, routineAddress, 3);
+
+    expect(result.localDefaults).toEqual([5]);
+    expect(result.firstInstructionAddress).toBe(0x0d);
   });
 });

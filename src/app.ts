@@ -73,6 +73,12 @@ export type OperandCount = "0OP" | "1OP" | "2OP" | "VAR";
 
 export type OperandType = "large constant" | "small constant" | "variable" | "omitted";
 
+export interface RoutineHeader {
+  localCount: number;
+  localDefaults: number[]; // empty in V5+, per §5.1
+  firstInstructionAddress: number;
+}
+
 export interface DecodedInstruction {
   address: number;
   form: InstructionForm;
@@ -121,6 +127,29 @@ export interface BranchReadResult {
 export interface TextArgumentResult {
   tokens: DecodedToken[];
   bytesConsumed: number;
+}
+
+export function readRoutineHeader(
+  storyData: Uint8Array,
+  routineAddress: number,
+  version: number,
+): RoutineHeader {
+  const localCount = readByte(storyData, routineAddress);
+  const localDefaults: number[] = [];
+
+  if (version <= 4) {
+    for (let i = 0; i < localCount; i++) {
+      localDefaults.push(readWord(storyData, routineAddress + 1 + i * 2));
+    }
+  }
+
+  const headerSize = 1 + localDefaults.length * 2;
+
+  return {
+    localCount,
+    localDefaults,
+    firstInstructionAddress: routineAddress + headerSize,
+  };
 }
 
 export function readTextArgument(

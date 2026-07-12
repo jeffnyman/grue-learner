@@ -1177,3 +1177,37 @@ describe("decodeInstruction — store and branch combined", () => {
     expect(result.nextInstructionAddress).toBe(0x04);
   });
 });
+
+describe("decodeInstruction — real Zork I instruction (inc_chk)", () => {
+  test("decodes inc_chk (2OP:5, variable form) with a variable-reference operand and a large constant", () => {
+    const mockStory = new Uint8Array(10);
+    // variable form, 2OP count (bit5=0), opcode number 5: 0b11000101 = 0xc5
+    mockStory[0x00] = 0xc5;
+    // type byte: small constant, large constant, omitted, omitted: 0b01001111 = 0x4f
+    mockStory[0x01] = 0x4f;
+    mockStory[0x02] = 0x12; // operand 1: variable reference number 18 (global G02)
+    mockStory[0x03] = 0x03; // operand 2 high byte
+    mockStory[0x04] = 0xe7; // operand 2 low byte (0x03e7 = 999)
+    // branch byte: sense=false, 1-byte form, offset=15: 0b01001111 = 0x4f
+    mockStory[0x05] = 0x4f;
+
+    const result = decodeInstruction(mockStory, 0x00, 3, 0x00);
+
+    expect(result).toEqual({
+      address: 0x00,
+      form: "variable",
+      operandCount: "2OP",
+      opcodeNumber: 5,
+      operands: [
+        { type: "small constant", value: 18, bytesConsumed: 1 }, // variable reference, not a literal
+        { type: "large constant", value: 999, bytesConsumed: 2 },
+      ],
+      storeTarget: null,
+      // address after branch data = 0x06; target = 0x06 + 15 - 2 = 0x13
+      branchOutcome: { kind: "jump", targetAddress: 0x13 },
+      branchBytesConsumed: 1,
+      text: null,
+      nextInstructionAddress: 0x06, // opcode(1) + type(1) + operands(1+2) + branch(1)
+    });
+  });
+});

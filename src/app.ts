@@ -15,12 +15,18 @@ const storeByteTable: Record<string, StoreInfo> = {
   "VAR:1": false,                       // storew
   "VAR:3": false,                       // put_prop
   "VAR:4": { storesFromVersion: 5 },    // sread → aread
+  "VAR:8": false,                       // push
 
+  "2OP:1": false,                       // je
+  "2OP:3": false,                       // jg
+  "2OP:5": false,                       // inc_chk
   "2OP:10": false,                      // test_attr
   "2OP:13": false,                      // store
   "2OP:14": false,                      // insert_obj
+  "2OP:15": true,                       // loadw
   "2OP:16": true,                       // loadb
   "2OP:20": true,                       // add
+  "2OP:21": true,                       // sub
 
   "1OP:0": false,                       // jz
   "1OP:2": true,                        // get_child — §14, stores the child object (0 if none)
@@ -38,12 +44,18 @@ const branchByteTable: Record<string, boolean> = {
   "VAR:1": false,   // storew
   "VAR:3": false,   // put_prop
   "VAR:4": false,   // sread/aread
+  "VAR:8": false,   // push
 
+  "2OP:1": true,    // je
+  "2OP:3": true,    // jg
+  "2OP:5": true,    // inc_chk
   "2OP:10": true,   // test_attr
   "2OP:13": false,  // store
   "2OP:14": false,  // insert_obj
+  "2OP:15": false,  // loadw
   "2OP:16": false,  // loadb
   "2OP:20": false,  // add
+  "2OP:21": false,  // sub
 
   "1OP:0": true,    // jz
   "1OP:2": true,    // get_child — §14, branches if the result is nonzero

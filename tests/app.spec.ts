@@ -946,3 +946,191 @@ describe("decodeInstruction — narrow slice (0OP, no trailing arguments)", () =
     });
   });
 });
+
+describe("decodeInstruction — operands, no trailing arguments", () => {
+  test("decodes insert_obj (2OP:14, long form) with two small-constant operands", () => {
+    const mockStory = new Uint8Array(10);
+    // long form: top two bits 00; opcode number 14 = 0b01110
+    // both operand-type bits = 0 (small constant, small constant): 0b00001110 = 0x0e
+    mockStory[0x00] = 0b00001110;
+    mockStory[0x01] = 0x04; // operand 1: object 4
+    mockStory[0x02] = 0xb4; // operand 2: object 180
+
+    const result = decodeInstruction(mockStory, 0x00, 3, 0x00);
+
+    expect(result).toEqual({
+      address: 0x00,
+      form: "long",
+      operandCount: "2OP",
+      opcodeNumber: 14,
+      operands: [
+        { type: "small constant", value: 0x04, bytesConsumed: 1 },
+        { type: "small constant", value: 0xb4, bytesConsumed: 1 },
+      ],
+      storeTarget: null,
+      branchOutcome: null,
+      branchBytesConsumed: null,
+      text: null,
+      nextInstructionAddress: 0x03, // 1 opcode byte + 2 operand bytes
+    });
+  });
+
+  test("decodes insert_obj at a nonzero start address, confirming operand cursor math", () => {
+    const mockStory = new Uint8Array(20);
+    const startAddress = 0x0a;
+    mockStory[startAddress] = 0b00001110;
+    mockStory[startAddress + 1] = 0x11;
+    mockStory[startAddress + 2] = 0x22;
+
+    const result = decodeInstruction(mockStory, startAddress, 3, 0x00);
+
+    expect(result.operands).toEqual([
+      { type: "small constant", value: 0x11, bytesConsumed: 1 },
+      { type: "small constant", value: 0x22, bytesConsumed: 1 },
+    ]);
+    expect(result.nextInstructionAddress).toBe(0x0d); // startAddress + 3
+  });
+});
+
+describe("decodeInstruction — operands with a store byte", () => {
+  test("decodes add (2OP:20, variable form) with two operands and a store to the stack", () => {
+    const mockStory = new Uint8Array(10);
+    // variable form, count 2OP (bit5=0), opcode number 20 = 0b10100: 0b11010100 = 0xd4
+    mockStory[0x00] = 0xd4;
+    // type byte: large constant, small constant, omitted, omitted = 0b00011111
+    mockStory[0x01] = 0b00011111;
+    mockStory[0x02] = 0x03; // large constant high byte
+    mockStory[0x03] = 0xe8; // large constant low byte (0x03e8 = 1000)
+    mockStory[0x04] = 0x02; // small constant (2)
+    mockStory[0x05] = 0x00; // store byte: variable 0 = stack
+
+    const result = decodeInstruction(mockStory, 0x00, 3, 0x00);
+
+    expect(result).toEqual({
+      address: 0x00,
+      form: "variable",
+      operandCount: "2OP",
+      opcodeNumber: 20,
+      operands: [
+        { type: "large constant", value: 1000, bytesConsumed: 2 },
+        { type: "small constant", value: 2, bytesConsumed: 1 },
+      ],
+      storeTarget: { variableNumber: 0, bytesConsumed: 1 },
+      branchOutcome: null,
+      branchBytesConsumed: null,
+      text: null,
+      nextInstructionAddress: 0x06, // opcode(1) + type(1) + operands(2+1) + store(1)
+    });
+  });
+
+  test("decodes add storing to a local variable, not just the stack", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0xd4;
+    mockStory[0x01] = 0b01011111; // small constant, small constant, omitted, omitted
+    mockStory[0x02] = 0x05;
+    mockStory[0x03] = 0x0a;
+    mockStory[0x04] = 0x03; // store byte: local variable 3
+
+    const result = decodeInstruction(mockStory, 0x00, 3, 0x00);
+
+    expect(result.storeTarget).toEqual({ variableNumber: 3, bytesConsumed: 1 });
+    expect(result.nextInstructionAddress).toBe(0x05);
+  });
+});
+
+describe("decodeInstruction — operands with a branch byte", () => {
+  test("decodes test_attr (2OP:10, long form) with a 1-byte branch", () => {
+    const mockStory = new Uint8Array(10);
+    // long form, opcode number 10 = 0b01010, both operands small constant: 0b00001010 = 0x0a
+    mockStory[0x00] = 0x0a;
+    mockStory[0x01] = 0xb4; // object 180
+    mockStory[0x02] = 0x03; // attribute 3
+    // branch byte: bit7=1 (true), bit6=1 (1-byte), offset=10 = 0b11001010
+    mockStory[0x03] = 0b11001010;
+
+    const result = decodeInstruction(mockStory, 0x00, 3, 0x00);
+
+    expect(result).toEqual({
+      address: 0x00,
+      form: "long",
+      operandCount: "2OP",
+      opcodeNumber: 10,
+      operands: [
+        { type: "small constant", value: 0xb4, bytesConsumed: 1 },
+        { type: "small constant", value: 0x03, bytesConsumed: 1 },
+      ],
+      storeTarget: null,
+      // address after branch data = 0x04; target = 0x04 + 10 - 2 = 0x0c
+      branchOutcome: { kind: "jump", targetAddress: 0x0c },
+      branchBytesConsumed: 1,
+      text: null,
+      nextInstructionAddress: 0x04, // opcode(1) + operands(1+1) + branch(1)
+    });
+  });
+
+  test("decodes test_attr with a 2-byte branch, confirming the extra byte after operands", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0x0a;
+    mockStory[0x01] = 0xb4;
+    mockStory[0x02] = 0x03;
+    // branch byte: bit7=0 (false), bit6=0 (2-byte), high6=0, low byte=100
+    mockStory[0x03] = 0b00000000;
+    mockStory[0x04] = 100;
+
+    const result = decodeInstruction(mockStory, 0x00, 3, 0x00);
+
+    // address after branch data = 0x05; target = 0x05 + 100 - 2 = 0x67
+    expect(result.branchOutcome).toEqual({ kind: "jump", targetAddress: 0x67 });
+    expect(result.branchBytesConsumed).toBe(2);
+    expect(result.nextInstructionAddress).toBe(0x05); // opcode(1) + operands(1+1) + branch(2)
+  });
+});
+
+describe("decodeInstruction — text argument", () => {
+  test("decodes print (0OP:2, short form) with a single-word text argument", () => {
+    const mockStory = new Uint8Array(10);
+    // short form, 0OP (bits 4-5 = 11), opcode number 2: 0b10110010 = 0xb2
+    mockStory[0x00] = 0xb2;
+    // Z-string "adi": end-bit set, zchar 6='a', zchar 9='d', zchar 14='i' (all A0)
+    const word = (1 << 15) | (6 << 10) | (9 << 5) | 14;
+    mockStory[0x01] = (word >> 8) & 0xff;
+    mockStory[0x02] = word & 0xff;
+
+    const result = decodeInstruction(mockStory, 0x00, 5, 0x00);
+
+    expect(result).toEqual({
+      address: 0x00,
+      form: "short",
+      operandCount: "0OP",
+      opcodeNumber: 2,
+      operands: [],
+      storeTarget: null,
+      branchOutcome: null,
+      branchBytesConsumed: null,
+      text: [
+        { type: "zscii", value: 97 }, // 'a'
+        { type: "zscii", value: 100 }, // 'd'
+        { type: "zscii", value: 105 }, // 'i'
+      ],
+      nextInstructionAddress: 0x03, // opcode(1) + text word(2)
+    });
+  });
+
+  test("decodes print at a nonzero address, confirming the text-start cursor", () => {
+    const mockStory = new Uint8Array(10);
+    const startAddress = 0x04;
+    mockStory[startAddress] = 0xb2;
+    const word = (1 << 15) | (6 << 10) | (9 << 5) | 14;
+    mockStory[startAddress + 1] = (word >> 8) & 0xff;
+    mockStory[startAddress + 2] = word & 0xff;
+
+    const result = decodeInstruction(mockStory, startAddress, 5, 0x00);
+
+    expect(result.text).toEqual([
+      { type: "zscii", value: 97 },
+      { type: "zscii", value: 100 },
+      { type: "zscii", value: 105 },
+    ]);
+    expect(result.nextInstructionAddress).toBe(0x07); // startAddress + 3
+  });
+});

@@ -1134,3 +1134,46 @@ describe("decodeInstruction — text argument", () => {
     expect(result.nextInstructionAddress).toBe(0x07); // startAddress + 3
   });
 });
+
+describe("decodeInstruction — store and branch combined", () => {
+  test("decodes get_child (1OP:130, short form) with both a store and a branch byte", () => {
+    const mockStory = new Uint8Array(10);
+    // short form, 1OP, small constant operand type (bits 4-5 = 01), opcode number 2: 0b10010010 = 0x92
+    mockStory[0x00] = 0x92;
+    mockStory[0x01] = 0xb4; // operand: object 180 (the parent object)
+    mockStory[0x02] = 0x05; // store byte: local variable 5
+    // branch byte: bit7=1 (true), bit6=1 (1-byte), offset=15
+    mockStory[0x03] = 0b11001111;
+
+    const result = decodeInstruction(mockStory, 0x00, 3, 0x00);
+
+    expect(result).toEqual({
+      address: 0x00,
+      form: "short",
+      operandCount: "1OP",
+      opcodeNumber: 2,
+      operands: [{ type: "small constant", value: 0xb4, bytesConsumed: 1 }],
+      storeTarget: { variableNumber: 5, bytesConsumed: 1 },
+      // address after branch data = 0x04; target = 0x04 + 15 - 2 = 0x11
+      branchOutcome: { kind: "jump", targetAddress: 0x11 },
+      branchBytesConsumed: 1,
+      text: null,
+      nextInstructionAddress: 0x04, // opcode(1) + operand(1) + store(1) + branch(1)
+    });
+  });
+
+  test("decodes get_child where the branch means returnFalse, store still present", () => {
+    const mockStory = new Uint8Array(10);
+    mockStory[0x00] = 0x92;
+    mockStory[0x01] = 0x0a; // object 10
+    mockStory[0x02] = 0x00; // store to stack
+    // branch byte: bit7=1 (true), bit6=1 (1-byte), offset=0 -> returnFalse
+    mockStory[0x03] = 0b11000000;
+
+    const result = decodeInstruction(mockStory, 0x00, 3, 0x00);
+
+    expect(result.storeTarget).toEqual({ variableNumber: 0, bytesConsumed: 1 });
+    expect(result.branchOutcome).toEqual({ kind: "returnFalse" });
+    expect(result.nextInstructionAddress).toBe(0x04);
+  });
+});

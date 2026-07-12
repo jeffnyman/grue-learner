@@ -23,6 +23,7 @@ const storeByteTable: Record<string, StoreInfo> = {
   "2OP:20": true,                       // add
 
   "1OP:0": false,                       // jz
+  "1OP:2": true,                        // get_child — §14, stores the child object (0 if none)
   "1OP:11": false,                      // ret
   "1OP:12": false,                      // jump
 
@@ -45,6 +46,7 @@ const branchByteTable: Record<string, boolean> = {
   "2OP:20": false,  // add
 
   "1OP:0": true,    // jz
+  "1OP:2": true,    // get_child — §14, branches if the result is nonzero
   "1OP:11": false,  // ret
   "1OP:12": false,  // jump
 
